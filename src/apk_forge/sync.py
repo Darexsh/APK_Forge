@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from apk_forge.catalog import Catalog, CatalogApp, load_catalog
 from apk_forge.config import load_apps_config
@@ -43,10 +44,13 @@ def sync_build_and_publish(
     keystore_password: str | None = "public",
     key_password: str | None = "public",
     force: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> SyncResult:
     release_list_config = config
     skipped: tuple[str, ...] = ()
     if not force:
+        if progress is not None:
+            progress("Checking catalog and release assets for unchanged apps")
         config, skipped = filter_unchanged_apps(
             config=config,
             vault_root=vault_root,
@@ -56,7 +60,14 @@ def sync_build_and_publish(
             github_token=github_token,
             release_tag=release_tag,
         )
+        if progress is not None:
+            for app_id in skipped:
+                progress(f"Skipped unchanged app ({app_id})")
+    elif progress is not None:
+        progress("Force mode enabled; rebuilding all enabled apps")
 
+    if progress is not None:
+        progress(f"Queued {len(config.enabled_apps)} app(s) for build")
     build_result = run_local_build(
         config=config,
         vault_root=vault_root,
@@ -70,11 +81,14 @@ def sync_build_and_publish(
         keystore_password=keystore_password,
         key_password=key_password,
         continue_on_error=True,
+        progress=progress,
     )
     successful_ids = {app.id for app in build_result.apps}
     publish_config = config.with_apps(
         tuple(app for app in config.enabled_apps if app.id in successful_ids)
     )
+    if progress is not None:
+        progress(f"Publishing {len(publish_config.enabled_apps)} successful app(s)")
     publish_result = publish_signed_workspace_outputs(
         config=publish_config,
         vault_root=vault_root,
@@ -88,6 +102,8 @@ def sync_build_and_publish(
         release_list_config=release_list_config,
         mpp_paths={app.id: app.patches_path for app in build_result.apps},
     )
+    if progress is not None:
+        progress("Sync finished")
     return SyncResult(build=build_result, publish=publish_result, skipped=skipped)
 
 
@@ -109,6 +125,7 @@ def sync_from_paths(
     keystore_password: str | None = "public",
     key_password: str | None = "public",
     force: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> SyncResult:
     return sync_build_and_publish(
         config=load_apps_config(config_path),
@@ -128,6 +145,7 @@ def sync_from_paths(
         keystore_password=keystore_password,
         key_password=key_password,
         force=force,
+        progress=progress,
     )
 
 

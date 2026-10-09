@@ -80,8 +80,11 @@ class PipelineTest(unittest.TestCase):
             patches = root / "example.mpp"
             patches.write_bytes(b"patches")
             config = _config_for_source("example.apk")
+            progress_messages: list[str] = []
 
-            def fake_patch(command) -> ProcessResult:
+            def fake_patch(command, output=None) -> ProcessResult:
+                if output is not None:
+                    output("Applying patch: Example")
                 command.output_apk.write_bytes(b"patched")
                 return ProcessResult(args=tuple(command.as_args()), return_code=0, stdout="", stderr="")
 
@@ -97,12 +100,14 @@ class PipelineTest(unittest.TestCase):
                     workspace_root=workspace_root,
                     morphe_cli_jar=root / "morphe-cli.jar",
                     skip_signing=True,
+                    progress=progress_messages.append,
                 )
                 output_bytes = result.apps[0].output_apk.read_bytes()
 
             self.assertEqual(1, patch_apk.call_count)
             self.assertFalse(result.apps[0].signed)
             self.assertEqual(b"patched", output_bytes)
+            self.assertIn("Morphe example-app: Applying patch: Example", progress_messages)
             self.assertIn("Signed: no", format_build_result(result))
 
     def test_local_build_passes_patch_selection(self) -> None:
@@ -124,7 +129,7 @@ class PipelineTest(unittest.TestCase):
             )
             commands = []
 
-            def fake_patch(command) -> ProcessResult:
+            def fake_patch(command, output=None) -> ProcessResult:
                 commands.append(command)
                 command.output_apk.write_bytes(b"patched")
                 return ProcessResult(args=tuple(command.as_args()), return_code=0, stdout="", stderr="")
@@ -158,7 +163,7 @@ class PipelineTest(unittest.TestCase):
             patches.write_bytes(b"patches")
             config = _config_for_source("example.apk")
 
-            def fake_patch(command) -> ProcessResult:
+            def fake_patch(command, output=None) -> ProcessResult:
                 command.output_apk.write_bytes(b"unsigned")
                 return ProcessResult(args=tuple(command.as_args()), return_code=0, stdout="", stderr="")
 

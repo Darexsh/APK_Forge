@@ -41,6 +41,7 @@ class SyncTest(unittest.TestCase):
             )
             build_result = BuildResult(apps=())
             publish_result = PublishResult(apps=(), catalog_path=root / "catalog.json")
+            progress_messages: list[str] = []
 
             with (
                 patch("apk_forge.sync.filter_unchanged_apps", return_value=(config, ())),
@@ -55,6 +56,7 @@ class SyncTest(unittest.TestCase):
                     repository="owner/repo",
                     github_token="token",
                     body_template_path=root / "body.md",
+                    progress=progress_messages.append,
                 )
 
         self.assertEqual(build_result, result.build)
@@ -62,6 +64,8 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(1, build.call_count)
         self.assertEqual(1, publish.call_count)
         self.assertIn("Build completed", format_sync_result(result))
+        self.assertIn("Queued 1 app(s) for build", progress_messages)
+        self.assertIn("Publishing 0 successful app(s)", progress_messages)
 
     def test_sync_skips_unchanged_planned_app(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

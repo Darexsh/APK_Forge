@@ -553,6 +553,11 @@ def _sync(args: argparse.Namespace) -> int:
         keystore_password=args.keystore_password,
         key_password=args.key_password,
         force=args.force,
+        progress=_print_progress,
     )
     print(format_sync_result(result))
     return 1 if result.failed else 0
+
+
+def _print_progress(message: str) -> None:
+    print(f"[apk-forge] {message}", flush=True)

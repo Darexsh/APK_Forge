@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from apk_forge.catalog import Catalog
 from apk_forge.errors import ForgeError
@@ -118,6 +119,7 @@ def run_local_build(
     key_password: str | None = "public",
     skip_signing: bool = False,
     continue_on_error: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> BuildResult:
     results: list[BuildAppResult] = []
     failures: list[BuildFailureResult] = []
@@ -128,6 +130,8 @@ def run_local_build(
     )
 
     for planned in create_plan(config, vault_root, github_token, workspace_root):
+        if progress is not None:
+            progress(f"Building {planned.app.name} ({planned.app.id})")
         try:
             results.append(
                 build_planned_app(
@@ -143,11 +147,16 @@ def run_local_build(
                     keystore_password=keystore_password,
                     key_password=key_password,
                     skip_signing=skip_signing,
+                    progress=progress,
                 )
             )
+            if progress is not None:
+                progress(f"Built {planned.app.name} ({planned.app.id})")
         except ForgeError as exc:
             if not continue_on_error:
                 raise
+            if progress is not None:
+                progress(f"Failed {planned.app.name} ({planned.app.id}): {exc}")
             failures.append(
                 BuildFailureResult(
                     id=planned.app.id,
@@ -174,6 +183,7 @@ def build_planned_app(
     keystore_password: str | None = "public",
     key_password: str | None = "public",
     skip_signing: bool = False,
+    progress: Callable[[str], None] | None = None,
 ) -> BuildAppResult:
     resolved_apkeditor_jar = (
         resolve_apkeditor(workspace_root, apkeditor_jar, github_token)
@@ -212,7 +222,14 @@ def build_planned_app(
         include_patches=planned.app.patches.enable,
         exclude_patches=planned.app.patches.disable,
     )
-    patch_apk(patch_command)
+    patch_apk(
+        patch_command,
+        output=(
+            (lambda line: progress(f"Morphe {planned.app.id}: {line}"))
+            if progress is not None
+            else None
+        ),
+    )
 
     signed = not skip_signing
     if signed:

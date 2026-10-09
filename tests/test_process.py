@@ -13,6 +13,18 @@ class ProcessTest(unittest.TestCase):
         self.assertEqual(0, result.return_code)
         self.assertEqual("ok", result.stdout.strip())
 
+    def test_streams_output(self) -> None:
+        lines: list[str] = []
+
+        result = run_process(
+            [sys.executable, "-c", "print('patch one')"],
+            output=lines.append,
+        )
+
+        self.assertEqual(0, result.return_code)
+        self.assertEqual(["patch one"], lines)
+        self.assertEqual("patch one", result.stdout.strip())
+
     def test_raises_on_failure(self) -> None:
         with self.assertRaisesRegex(ProcessError, "exit code 7"):
             run_process([sys.executable, "-c", "import sys; sys.exit(7)"])

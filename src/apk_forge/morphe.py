@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from apk_forge.errors import ForgeError
 from apk_forge.process import ProcessResult, run_process
@@ -68,8 +69,8 @@ def prepare_morphe_patch_command(
     )
 
 
-def patch_apk(command: MorphePatchCommand) -> ProcessResult:
-    result = run_process(command.as_args())
+def patch_apk(command: MorphePatchCommand, output: Callable[[str], None] | None = None) -> ProcessResult:
+    result = run_process(command.as_args(), output=output)
     _validate_patch_output(result)
     if not command.output_apk.is_file():
         raise MorpheError(f"Morphe did not create output APK: {command.output_apk}")
