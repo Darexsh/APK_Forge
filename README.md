@@ -159,6 +159,15 @@ Forge reads `GITHUB_TOKEN` from the environment, local `.env`, or
 standard Windows Android SDK location. Override with `--apksigner`, `--keystore`,
 `--key-alias`, `--keystore-password`, or `--key-password` when needed.
 
+## CI/CD
+
+The `Sync Vault` workflow runs from Forge and checks out the private vault
+repository using secrets:
+
+- `VAULT_REPO`: vault repository, for example `owner/private-vault`
+- `VAULT_DIR`: vault checkout directory inside the workflow workspace, for example `vault`
+- `VAULT_TOKEN`: token that can read and push the vault repository and manage its releases
+
 ## Project Files
 
 - `src/apk_forge/`: engine source

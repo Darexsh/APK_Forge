@@ -1,0 +1,67 @@
+name: Sync Vault
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      VAULT_REPO: ${{ secrets.VAULT_REPO }}
+      VAULT_DIR: ${{ secrets.VAULT_DIR }}
+      GITHUB_TOKEN: ${{ secrets.VAULT_TOKEN }}
+
+    steps:
+      - name: Checkout Forge
+        uses: actions/checkout@v4
+        with:
+          path: forge
+
+      - name: Checkout Vault
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.VAULT_REPO }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          path: ${{ secrets.VAULT_DIR }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Sync patched APKs
+        working-directory: forge
+        run: |
+          VAULT_PATH="$GITHUB_WORKSPACE/$VAULT_DIR"
+          PYTHONPATH=src python -m apk_forge sync \
+            --config "$VAULT_PATH/apps.json" \
+            --vault-root "$VAULT_PATH" \
+            --workspace-root "$VAULT_PATH/tmp" \
+            --catalog "$VAULT_PATH/catalog.json" \
+            --repo "$VAULT_REPO" \
+            --body-template "$VAULT_PATH/docs/patched-apks-release.md"
+
+      - name: Commit Vault changes
+        working-directory: ${{ secrets.VAULT_DIR }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog.json
+          if git diff --cached --quiet; then
+            echo "No Vault changes to commit."
+          else
+            git commit -m "Update generated APK catalog"
+            git push
+          fi
