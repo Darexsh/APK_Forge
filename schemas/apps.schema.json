@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/apk-forge/apps.schema.json",
+  "title": "APK Forge apps.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "apps"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "apps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/app"
+      }
+    }
+  },
+  "$defs": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "packageName", "enabled", "mpp", "sourceApk"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "mpp": {
+          "$ref": "#/$defs/mpp"
+        },
+        "sourceApk": {
+          "$ref": "#/$defs/sourceApk"
+        },
+        "output": {
+          "$ref": "#/$defs/output"
+        }
+      }
+    },
+    "mpp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "repository"],
+      "properties": {
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "default": "main"
+        },
+        "release": {
+          "type": "string",
+          "minLength": 1,
+          "default": "latest"
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "sourceApk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["vault", "githubReleaseAsset"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["type", "path"],
+          "properties": {
+            "type": {
+              "const": "vault"
+            }
+          }
+        },
+        {
+          "required": ["type", "repository", "release", "asset"],
+          "properties": {
+            "type": {
+              "const": "githubReleaseAsset"
+            }
+          }
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "releasePrefix": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "assetName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

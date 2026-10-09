@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/apk-forge/catalog.schema.json",
+  "title": "APK Forge catalog.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "apps"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "apps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/catalogApp"
+      }
+    }
+  },
+  "$defs": {
+    "catalogApp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "packageName",
+        "versionName",
+        "versionCode",
+        "type",
+        "release",
+        "asset",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "versionName": {
+          "type": "string"
+        },
+        "versionCode": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["managed", "archive"]
+        },
+        "release": {
+          "type": "string"
+        },
+        "asset": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      }
+    }
+  }
+}
