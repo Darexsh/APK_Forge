@@ -37,6 +37,7 @@ actually exist and are installable.
 - uploads signed APKs to a private `patched-apks` release
 - updates private `catalog.json`
 - skips unchanged apps during repeat sync runs
+- continues sync runs after individual app failures and reports them together
 
 Forge intentionally does not scrape APK mirror websites. Source packages are
 supplied by the vault owner.
@@ -96,6 +97,10 @@ python -m apk_forge sync \
 `sync` builds, signs, publishes, and updates the catalog. On later runs it skips
 apps that already match the catalog and release asset state. Use `--force` to
 rebuild and reupload unchanged apps.
+
+If one app fails during `sync`, Forge continues with the remaining apps.
+Successful apps are still published, and the command exits with an error after
+printing a combined failure summary.
 
 ## Useful Commands
 
@@ -166,7 +171,14 @@ repository using secrets:
 
 - `VAULT_REPO`: vault repository, for example `owner/private-vault`
 - `VAULT_DIR`: vault checkout directory inside the workflow workspace, for example `vault`
-- `VAULT_TOKEN`: token that can read and push the vault repository and manage its releases
+- `VAULT_TOKEN`: token that can read and push the vault repository and manage its releases (fine-grained token with `contents: read and write` and `metadata: read only` is sufficient)
+- `TELEGRAM_BOT_TOKEN`: optional Telegram bot token for failure alerts
+- `TELEGRAM_CHAT_ID`: optional Telegram chat id for failure alerts
+
+When Telegram secrets are configured, failed workflow runs send one Telegram
+message with the workflow link and the captured sync output. If multiple apps
+fail in one run, they are listed in the same message. The workflow still fails
+normally, so GitHub Actions keeps the failed state visible.
 
 ## Project Files
 
