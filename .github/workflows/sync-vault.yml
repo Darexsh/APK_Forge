@@ -2,6 +2,12 @@ name: Sync Vault
 
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild and republish even when catalog/release look unchanged"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -46,13 +52,18 @@ jobs:
         working-directory: forge
         run: |
           VAULT_PATH="$GITHUB_WORKSPACE/$VAULT_DIR"
+          FORCE_ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            FORCE_ARGS="--force"
+          fi
           PYTHONPATH=src python -m apk_forge sync \
             --config "$VAULT_PATH/apps.json" \
             --vault-root "$VAULT_PATH" \
             --workspace-root "$VAULT_PATH/tmp" \
             --catalog "$VAULT_PATH/catalog.json" \
             --repo "$VAULT_REPO" \
-            --body-template "$VAULT_PATH/docs/patched-apks-release.md"
+            --body-template "$VAULT_PATH/docs/patched-apks-release.md" \
+            $FORCE_ARGS
 
       - name: Commit Vault changes
         working-directory: ${{ secrets.VAULT_DIR }}
