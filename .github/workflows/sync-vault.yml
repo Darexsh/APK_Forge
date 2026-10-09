@@ -130,16 +130,14 @@ jobs:
             title="APK tool download failed"
           fi
 
-          message="$(cat <<EOF
-$title
-
-Repository: $GITHUB_REPOSITORY
-Workflow: $GITHUB_WORKFLOW
-Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-
-$details
-EOF
-)"
+          message="$(printf '%s\n\nRepository: %s\nWorkflow: %s\nRun: %s/%s/actions/runs/%s\n\n%s' \
+            "$title" \
+            "$GITHUB_REPOSITORY" \
+            "$GITHUB_WORKFLOW" \
+            "$GITHUB_SERVER_URL" \
+            "$GITHUB_REPOSITORY" \
+            "$GITHUB_RUN_ID" \
+            "$details")"
 
           curl -sS --fail \
             --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
