@@ -182,7 +182,7 @@ def format_mpp_source(app: ManagedApp, resolved_mpp_path: Path | None = None) ->
     mpp = app.mpp
     base = f"{mpp.owner}/{mpp.repository}"
     if mpp.path:
-        return f"{base}:{mpp.path}@{mpp.ref}"
+        return f"{base}:{Path(mpp.path).name}@{mpp.ref}"
     if mpp.asset:
         return f"{base}:{mpp.asset}@{mpp.release}"
     if resolved_mpp_path is not None:

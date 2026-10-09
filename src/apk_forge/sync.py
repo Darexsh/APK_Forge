@@ -7,6 +7,7 @@ from apk_forge.catalog import Catalog, CatalogApp, load_catalog
 from apk_forge.config import load_apps_config
 from apk_forge.github_release import GitHubReleaseClient, GitHubReleaseError
 from apk_forge.models import AppsConfig, ManagedApp, PlannedApp
+from apk_forge.mpp import resolve_mpp_identifier
 from apk_forge.pipeline import BuildResult, run_local_build
 from apk_forge.publish import PublishResult, publish_signed_workspace_outputs
 from apk_forge.planner import create_plan
@@ -140,7 +141,14 @@ def filter_unchanged_apps(
     skipped: list[str] = []
 
     for planned in create_plan(config, vault_root, github_token, workspace_root):
-        if is_planned_app_unchanged(planned, catalog_by_id.get(planned.app.id), release_assets, release_tag):
+        mpp_identifier = resolve_mpp_identifier(planned.app.mpp, github_token)
+        if is_planned_app_unchanged(
+            planned,
+            catalog_by_id.get(planned.app.id),
+            release_assets,
+            release_tag,
+            mpp_identifier,
+        ):
             skipped.append(planned.app.id)
         else:
             changed_apps.append(planned.app)
@@ -153,6 +161,7 @@ def is_planned_app_unchanged(
     catalog_app: CatalogApp | None,
     release_assets: set[str],
     release_tag: str,
+    mpp_identifier: str | None = None,
 ) -> bool:
     if catalog_app is None:
         return False
@@ -162,6 +171,7 @@ def is_planned_app_unchanged(
         and catalog_app.version_code == source_version_code(planned.source_path)
         and catalog_app.release == release_tag
         and catalog_app.asset == expected_asset
+        and (mpp_identifier is None or catalog_app.mpp == mpp_identifier)
         and expected_asset in release_assets
     )
 

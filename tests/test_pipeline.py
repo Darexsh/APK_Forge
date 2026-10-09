@@ -8,7 +8,14 @@ from unittest.mock import patch
 from apk_forge.catalog import Catalog, CatalogApp
 from apk_forge.config import parse_apps_config
 from apk_forge.process import ProcessResult
-from apk_forge.pipeline import create_dry_run, format_build_result, format_dry_run, run_local_build
+from apk_forge.pipeline import (
+    PipelineError,
+    create_dry_run,
+    format_build_result,
+    format_dry_run,
+    run_local_build,
+    validate_mpp_compatibility,
+)
 
 
 class PipelineTest(unittest.TestCase):
@@ -81,6 +88,7 @@ class PipelineTest(unittest.TestCase):
             with (
                 patch("apk_forge.pipeline.resolve_morphe_cli", return_value=root / "morphe-cli.jar"),
                 patch("apk_forge.pipeline.download_mpp", return_value=patches),
+                patch("apk_forge.pipeline.compatible_versions", return_value=("unknown",)),
                 patch("apk_forge.pipeline.patch_apk", side_effect=fake_patch) as patch_apk,
             ):
                 result = run_local_build(
@@ -120,6 +128,7 @@ class PipelineTest(unittest.TestCase):
             with (
                 patch("apk_forge.pipeline.resolve_morphe_cli", return_value=root / "morphe-cli.jar"),
                 patch("apk_forge.pipeline.download_mpp", return_value=patches),
+                patch("apk_forge.pipeline.compatible_versions", return_value=("unknown",)),
                 patch("apk_forge.pipeline.patch_apk", side_effect=fake_patch),
                 patch("apk_forge.pipeline.resolve_apksigner", return_value=root / "apksigner"),
                 patch("apk_forge.pipeline.resolve_default_keystore", return_value=root / "signing.jks"),
@@ -137,6 +146,17 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(1, verify_apk.call_count)
             self.assertTrue(result.apps[0].signed)
             self.assertEqual(b"signed", output_bytes)
+
+    def test_rejects_incompatible_mpp_version(self) -> None:
+        with patch("apk_forge.pipeline.compatible_versions", return_value=("1.2.4",)):
+            with self.assertRaisesRegex(PipelineError, "Update the source APK"):
+                validate_mpp_compatibility(
+                    morphe_cli_jar=Path("morphe.jar"),
+                    patches=Path("patches-1.22.1.mpp"),
+                    package_name="com.example.app",
+                    source_version="1.2.3",
+                    app_id="example",
+                )
 
 
 def _config_for_source(source_path: str):

@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from apk_forge.errors import ForgeError
 from apk_forge.models import MppSource
+from apk_forge.process import run_process
 
 
 class MppError(ForgeError):
@@ -53,6 +54,14 @@ def download_mpp(source: MppSource, output_dir: Path, token: str | None = None) 
         raise MppError(f"Failed to download MPP: {exc.reason}") from exc
 
     return output_path
+
+
+def resolve_mpp_identifier(source: MppSource, token: str | None = None) -> str:
+    base = f"{source.owner}/{source.repository}"
+    if source.path is not None:
+        return f"{base}:{Path(source.path).name}@{source.ref}"
+    asset = find_release_mpp_asset(source, token)
+    return f"{base}:{asset['name']}@{source.release}"
 
 
 def download_release_mpp(source: MppSource, output_dir: Path, token: str | None = None) -> Path:
@@ -107,6 +116,46 @@ def find_release_mpp_asset(source: MppSource, token: str | None = None) -> dict:
         f"Multiple .mpp release assets found for {source.owner}/{source.repository}@{source.release}; "
         "set mpp.asset to choose one"
     )
+
+
+def compatible_versions(
+    morphe_cli_jar: Path,
+    patches: Path,
+    package_name: str,
+) -> tuple[str, ...]:
+    result = run_process(
+        [
+            "java",
+            "-jar",
+            str(morphe_cli_jar),
+            "list-versions",
+            "--patches",
+            str(patches),
+            "--filter-package-names",
+            package_name,
+        ]
+    )
+    return parse_compatible_versions(result.stdout)
+
+
+def parse_compatible_versions(output: str) -> tuple[str, ...]:
+    versions: list[str] = []
+    in_versions = False
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line == "Most common compatible versions:":
+            in_versions = True
+            continue
+        if line.startswith("INFO: Package name:"):
+            in_versions = False
+            continue
+        if in_versions:
+            version = line.split(" [versionCodes:", 1)[0].split(" (", 1)[0].strip()
+            if version:
+                versions.append(version)
+    return tuple(versions)
 
 
 def load_release(source: MppSource, token: str | None = None) -> dict:

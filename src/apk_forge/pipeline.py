@@ -7,9 +7,9 @@ from apk_forge.catalog import Catalog
 from apk_forge.errors import ForgeError
 from apk_forge.models import AppsConfig
 from apk_forge.morphe import patch_apk, prepare_morphe_patch_command
-from apk_forge.mpp import download_mpp
+from apk_forge.mpp import compatible_versions, download_mpp
 from apk_forge.planner import create_plan
-from apk_forge.releases import patched_signed_asset_name, patched_unsigned_asset_name
+from apk_forge.releases import patched_signed_asset_name, patched_unsigned_asset_name, source_version_name
 from apk_forge.signing import (
     prepare_sign_command,
     prepare_verify_command,
@@ -131,6 +131,13 @@ def run_local_build(
             app_workspace / "patches",
             github_token,
         )
+        validate_mpp_compatibility(
+            morphe_cli_jar=resolved_morphe_cli_jar,
+            patches=patches_path,
+            package_name=planned.app.package_name,
+            source_version=source_version_name(planned.source_path),
+            app_id=planned.app.id,
+        )
 
         unsigned_apk = app_workspace / "unsigned" / patched_unsigned_asset_name(
             planned.app,
@@ -186,6 +193,27 @@ def run_local_build(
         )
 
     return BuildResult(apps=tuple(results))
+
+
+def validate_mpp_compatibility(
+    morphe_cli_jar: Path,
+    patches: Path,
+    package_name: str,
+    source_version: str,
+    app_id: str,
+) -> None:
+    versions = compatible_versions(morphe_cli_jar, patches, package_name)
+    if source_version in versions:
+        return
+    if not versions:
+        raise PipelineError(
+            f"{app_id}: MPP has no compatible versions for {package_name}. "
+            "Check the app package name or choose a matching MPP file."
+        )
+    raise PipelineError(
+        f"{app_id}: source APK version {source_version} is not compatible with {patches.name}. "
+        f"Compatible versions: {', '.join(versions)}. Update the source APK or choose a matching MPP file."
+    )
 
 
 def format_dry_run(result: DryRunResult) -> str:

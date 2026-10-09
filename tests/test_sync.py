@@ -103,6 +103,7 @@ class SyncTest(unittest.TestCase):
                 release="patched-apks",
                 asset="example-1.2.3-patched.apk",
                 sha256="a" * 64,
+                mpp="example/patches:example.mpp@main",
             )
 
             unchanged = is_planned_app_unchanged(
@@ -110,9 +111,63 @@ class SyncTest(unittest.TestCase):
                 catalog_app,
                 {"example-1.2.3-patched.apk"},
                 "patched-apks",
+                "example/patches:example.mpp@main",
             )
 
         self.assertTrue(unchanged)
+
+    def test_changed_when_mpp_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            vault_root = root / "vault"
+            vault_root.mkdir()
+            source = vault_root / "Example_v1.2.3.apk"
+            source.write_bytes(b"source")
+            config = parse_apps_config(
+                {
+                    "schemaVersion": 1,
+                    "apps": [
+                        {
+                            "id": "example",
+                            "name": "Example",
+                            "packageName": "com.example.app",
+                            "enabled": True,
+                            "mpp": {
+                                "owner": "example",
+                                "repository": "patches",
+                                "path": "example.mpp",
+                            },
+                            "sourceApk": {
+                                "type": "vault",
+                                "path": "Example_v1.2.3.apk",
+                            },
+                        }
+                    ],
+                }
+            )
+            planned = create_plan(config, vault_root)[0]
+            catalog_app = CatalogApp(
+                id="example",
+                name="Example",
+                package_name="com.example.app",
+                version_name="1.2.3",
+                version_code=123,
+                type="managed",
+                release="patched-apks",
+                asset="example-1.2.3-patched.apk",
+                sha256="a" * 64,
+                mpp="example/patches:old.mpp@main",
+            )
+
+            unchanged = is_planned_app_unchanged(
+                planned,
+                catalog_app,
+                {"example-1.2.3-patched.apk"},
+                "patched-apks",
+                "example/patches:new.mpp@main",
+            )
+
+        self.assertFalse(unchanged)
 
 
 if __name__ == "__main__":

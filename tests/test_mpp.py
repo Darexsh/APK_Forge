@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from apk_forge.models import MppSource
-from apk_forge.mpp import mpp_raw_url, mpp_release_url
+from apk_forge.mpp import mpp_raw_url, mpp_release_url, parse_compatible_versions, resolve_mpp_identifier
 
 
 class MppTest(unittest.TestCase):
@@ -55,6 +55,28 @@ class MppTest(unittest.TestCase):
                 )
             ),
         )
+
+    def test_resolves_path_mpp_identifier(self) -> None:
+        self.assertEqual(
+            "example/patches:example.mpp@dev",
+            resolve_mpp_identifier(
+                MppSource(
+                    owner="example",
+                    repository="patches",
+                    path="apps/example.mpp",
+                    ref="dev",
+                )
+            ),
+        )
+
+    def test_parses_compatible_versions(self) -> None:
+        output = """INFO: Package name: com.example.app
+Most common compatible versions:
+\t1.2.3 [versionCodes: ARM64_V8A=123] (1 patch)
+\t1.2.4 (2 patches)
+"""
+
+        self.assertEqual(("1.2.3", "1.2.4"), parse_compatible_versions(output))
 
 
 if __name__ == "__main__":
