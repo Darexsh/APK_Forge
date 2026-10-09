@@ -199,6 +199,16 @@ class PipelineTest(unittest.TestCase):
                     app_id="example",
                 )
 
+    def test_accepts_any_mpp_version(self) -> None:
+        with patch("apk_forge.pipeline.compatible_versions", return_value=("any",)):
+            validate_mpp_compatibility(
+                morphe_cli_jar=Path("morphe.jar"),
+                patches=Path("patches-1.22.1.mpp"),
+                package_name="com.example.app",
+                source_version="1.2.3",
+                app_id="example",
+            )
+
 
 def _config_for_source(source_path: str, patches=None):
     return parse_apps_config(

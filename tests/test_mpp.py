@@ -78,6 +78,14 @@ Most common compatible versions:
 
         self.assertEqual(("1.2.3", "1.2.4"), parse_compatible_versions(output))
 
+    def test_parses_any_compatible_version(self) -> None:
+        output = """INFO: Package name: com.example.app
+Most common compatible versions:
+\tany (1 patch)
+"""
+
+        self.assertEqual(("any",), parse_compatible_versions(output))
+
 
 if __name__ == "__main__":
     unittest.main()

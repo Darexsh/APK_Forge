@@ -263,6 +263,8 @@ def validate_mpp_compatibility(
     app_id: str,
 ) -> None:
     versions = compatible_versions(morphe_cli_jar, patches, package_name)
+    if any(version.lower() == "any" for version in versions):
+        return
     if source_version in versions:
         return
     if not versions:
