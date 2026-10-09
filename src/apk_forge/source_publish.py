@@ -172,6 +172,7 @@ def _publish_one_source(
     source_package = _resolve_source_package(vault_root, app_id, source_package_path)
     digest = sha256_file(source_package)
     unchanged = _source_config_matches(app, release_spec, source_package.name, digest)
+    previous_asset = _configured_source_asset(app, release_spec)
     remote_has_asset = False
 
     if release_client is not None:
@@ -191,6 +192,12 @@ def _publish_one_source(
         asset=source_package.name,
         digest=digest,
     )
+    if (
+        release_client is not None
+        and previous_asset is not None
+        and previous_asset != source_package.name
+    ):
+        release_client.remove_asset_by_name(release_spec, previous_asset)
 
     if skip_upload:
         action = "unchanged" if unchanged else "configured"
@@ -285,6 +292,18 @@ def _source_config_matches(app: dict, spec: ReleaseSpec, asset: str, digest: str
         and current.get("asset") == asset
         and current.get("sha256") == digest
     )
+
+
+def _configured_source_asset(app: dict, spec: ReleaseSpec) -> str | None:
+    current = app.get("sourceApk", {})
+    if not isinstance(current, dict):
+        return None
+    if current.get("type") != "githubReleaseAsset":
+        return None
+    if current.get("repository") != spec.repository or current.get("release") != spec.tag:
+        return None
+    asset = current.get("asset")
+    return asset if isinstance(asset, str) else None
 
 
 def _update_source_config(

@@ -88,6 +88,39 @@ class SourcePublishTest(unittest.TestCase):
         self.assertEqual("githubReleaseAsset", config["apps"][0]["sourceApk"]["type"])
         self.assertIn("configured: example", format_source_publish_summary(result))
 
+    def test_replaces_previous_source_asset_for_same_app(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path, vault_root, body_template = self._write_vault(root)
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["apps"][0]["sourceApk"] = {
+                "type": "githubReleaseAsset",
+                "repository": "owner/private-vault",
+                "release": "source-apks",
+                "asset": "Example_v1.2.4.apk",
+                "sha256": "old",
+            }
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            package = vault_root / "sources" / "example" / "Example_v1.2.3.apk"
+            package.write_bytes(b"source")
+            client = FakeReleaseClient({"Example_v1.2.4.apk"})
+
+            publish_source_packages(
+                config_path=config_path,
+                vault_root=vault_root,
+                repository="owner/private-vault",
+                github_token="token",
+                body_template_path=body_template,
+                app_id="example",
+                client=client,
+            )
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual("Example_v1.2.3.apk", config["apps"][0]["sourceApk"]["asset"])
+        self.assertEqual([package.resolve()], client.published)
+        self.assertEqual(["Example_v1.2.4.apk"], client.removed)
+        self.assertEqual({"Example_v1.2.3.apk"}, client.asset_names)
+
     def test_all_remove_missing_removes_configured_app_and_asset(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
