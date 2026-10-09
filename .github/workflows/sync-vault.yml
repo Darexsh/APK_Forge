@@ -19,6 +19,8 @@ jobs:
       VAULT_REPO: ${{ secrets.VAULT_REPO }}
       VAULT_DIR: ${{ secrets.VAULT_DIR }}
       GITHUB_TOKEN: ${{ secrets.VAULT_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
     steps:
       - name: Checkout Forge
@@ -51,6 +53,7 @@ jobs:
       - name: Sync patched APKs
         working-directory: forge
         run: |
+          set +e
           VAULT_PATH="$GITHUB_WORKSPACE/$VAULT_DIR"
           FORCE_ARGS=""
           if [ "${{ inputs.force }}" = "true" ]; then
@@ -63,11 +66,23 @@ jobs:
             --catalog "$VAULT_PATH/catalog.json" \
             --repo "$VAULT_REPO" \
             --body-template "$VAULT_PATH/docs/patched-apks-release.md" \
-            $FORCE_ARGS
+            $FORCE_ARGS 2>&1 | tee "$GITHUB_WORKSPACE/sync-output.log"
+          status=${PIPESTATUS[0]}
+          exit "$status"
 
       - name: Commit Vault changes
+        if: always()
         working-directory: ${{ secrets.VAULT_DIR }}
         run: |
+          if [ ! -d .git ]; then
+            echo "Vault checkout is not available; skipping commit."
+            exit 0
+          fi
+          if [ ! -f catalog.json ]; then
+            echo "catalog.json is not available; skipping commit."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add catalog.json
@@ -77,3 +92,56 @@ jobs:
             git commit -m "Update generated APK catalog"
             git push
           fi
+
+      - name: Notify Telegram on failure
+        if: failure()
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets are not configured; skipping notification."
+            exit 0
+          fi
+
+          output_file="$GITHUB_WORKSPACE/sync-output.log"
+          if [ -f "$output_file" ]; then
+            details="$(tail -c 3000 "$output_file")"
+          else
+            details="No sync output was captured."
+          fi
+          title="APK Forge failed"
+          if [ ! -f "$output_file" ]; then
+            title="APK Forge setup failed"
+          elif grep -qi "Update the source APK" "$output_file"; then
+            title="APK source updates needed"
+          elif grep -qi "source APK SHA-256 mismatch" "$output_file"; then
+            title="APK source checksum mismatch"
+          elif grep -qiE "No source package found|Multiple source packages found|Source package does not exist" "$output_file"; then
+            title="APK source package problem"
+          elif grep -qiE "No \\.mpp release asset found|Multiple \\.mpp release assets found|failed to download MPP|MPP has no compatible versions" "$output_file"; then
+            title="APK patch bundle problem"
+          elif grep -qiE "morphe.*patch|patch failed|UnsupportedClassVersionError|LinkageError" "$output_file"; then
+            title="APK patching failed"
+          elif grep -qiE "apksigner not found|signing failed|Failed to sign" "$output_file"; then
+            title="APK signing failed"
+          elif grep -qiE "GitHub upload failed|GitHub API failed|failed to download GitHub release asset|HTTP 401|HTTP 403|HTTP 404" "$output_file"; then
+            title="APK GitHub release failed"
+          elif grep -qiE "Config file is not valid JSON|Config file must contain|catalog" "$output_file"; then
+            title="APK catalog/config failed"
+          elif grep -qiE "No matching tool asset found|failed to download.*tool|APKEditor" "$output_file"; then
+            title="APK tool download failed"
+          fi
+
+          message="$(cat <<EOF
+$title
+
+Repository: $GITHUB_REPOSITORY
+Workflow: $GITHUB_WORKFLOW
+Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+$details
+EOF
+)"
+
+          curl -sS --fail \
+            --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=$message" \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" || true

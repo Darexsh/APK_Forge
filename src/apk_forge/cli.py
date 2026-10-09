@@ -555,4 +555,4 @@ def _sync(args: argparse.Namespace) -> int:
         force=args.force,
     )
     print(format_sync_result(result))
-    return 0
+    return 1 if result.failed else 0

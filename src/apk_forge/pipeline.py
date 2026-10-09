@@ -5,7 +5,7 @@ from pathlib import Path
 
 from apk_forge.catalog import Catalog
 from apk_forge.errors import ForgeError
-from apk_forge.models import AppsConfig
+from apk_forge.models import AppsConfig, PlannedApp
 from apk_forge.morphe import patch_apk, prepare_morphe_patch_command
 from apk_forge.mpp import compatible_versions, download_mpp
 from apk_forge.planner import create_plan
@@ -56,8 +56,17 @@ class BuildAppResult:
 
 
 @dataclass(frozen=True)
+class BuildFailureResult:
+    id: str
+    name: str
+    package_name: str
+    message: str
+
+
+@dataclass(frozen=True)
 class BuildResult:
     apps: tuple[BuildAppResult, ...]
+    failures: tuple[BuildFailureResult, ...] = ()
 
 
 def create_dry_run(
@@ -106,8 +115,10 @@ def run_local_build(
     keystore_password: str | None = "public",
     key_password: str | None = "public",
     skip_signing: bool = False,
+    continue_on_error: bool = False,
 ) -> BuildResult:
-    results = []
+    results: list[BuildAppResult] = []
+    failures: list[BuildFailureResult] = []
     resolved_morphe_cli_jar = resolve_morphe_cli(
         workspace_root,
         morphe_cli_jar,
@@ -115,84 +126,127 @@ def run_local_build(
     )
 
     for planned in create_plan(config, vault_root, github_token, workspace_root):
-        resolved_apkeditor_jar = (
-            resolve_apkeditor(workspace_root, apkeditor_jar, github_token)
-            if planned.source_path.suffix.lower() != ".apk"
-            else apkeditor_jar
-        )
-        app_workspace = workspace_root / "build" / planned.app.id
-        prepared = prepare_source_package(
-            planned.source_path,
-            app_workspace / "prepared",
-            resolved_apkeditor_jar,
-        )
-        patches_path = download_mpp(
-            planned.app.mpp,
-            app_workspace / "patches",
-            github_token,
-        )
-        validate_mpp_compatibility(
-            morphe_cli_jar=resolved_morphe_cli_jar,
-            patches=patches_path,
-            package_name=planned.app.package_name,
-            source_version=source_version_name(planned.source_path),
-            app_id=planned.app.id,
-        )
+        try:
+            results.append(
+                build_planned_app(
+                    planned=planned,
+                    vault_root=vault_root,
+                    workspace_root=workspace_root,
+                    resolved_morphe_cli_jar=resolved_morphe_cli_jar,
+                    github_token=github_token,
+                    apkeditor_jar=apkeditor_jar,
+                    apksigner=apksigner,
+                    keystore=keystore,
+                    key_alias=key_alias,
+                    keystore_password=keystore_password,
+                    key_password=key_password,
+                    skip_signing=skip_signing,
+                )
+            )
+        except ForgeError as exc:
+            if not continue_on_error:
+                raise
+            failures.append(
+                BuildFailureResult(
+                    id=planned.app.id,
+                    name=planned.app.name,
+                    package_name=planned.app.package_name,
+                    message=str(exc),
+                )
+            )
 
-        unsigned_apk = app_workspace / "unsigned" / patched_unsigned_asset_name(
+    return BuildResult(apps=tuple(results), failures=tuple(failures))
+
+
+def build_planned_app(
+    *,
+    planned: PlannedApp,
+    vault_root: Path,
+    workspace_root: Path,
+    resolved_morphe_cli_jar: Path,
+    github_token: str | None = None,
+    apkeditor_jar: Path | None = None,
+    apksigner: Path | None = None,
+    keystore: Path | None = None,
+    key_alias: str | None = "public",
+    keystore_password: str | None = "public",
+    key_password: str | None = "public",
+    skip_signing: bool = False,
+) -> BuildAppResult:
+    resolved_apkeditor_jar = (
+        resolve_apkeditor(workspace_root, apkeditor_jar, github_token)
+        if planned.source_path.suffix.lower() != ".apk"
+        else apkeditor_jar
+    )
+    app_workspace = workspace_root / "build" / planned.app.id
+    prepared = prepare_source_package(
+        planned.source_path,
+        app_workspace / "prepared",
+        resolved_apkeditor_jar,
+    )
+    patches_path = download_mpp(
+        planned.app.mpp,
+        app_workspace / "patches",
+        github_token,
+    )
+    validate_mpp_compatibility(
+        morphe_cli_jar=resolved_morphe_cli_jar,
+        patches=patches_path,
+        package_name=planned.app.package_name,
+        source_version=source_version_name(planned.source_path),
+        app_id=planned.app.id,
+    )
+
+    unsigned_apk = app_workspace / "unsigned" / patched_unsigned_asset_name(
+        planned.app,
+        planned.source_path,
+    )
+    unsigned_apk.parent.mkdir(parents=True, exist_ok=True)
+    patch_command = prepare_morphe_patch_command(
+        cli_jar=resolved_morphe_cli_jar,
+        patches=patches_path,
+        input_apk=prepared.patch_input_apk,
+        output_apk=unsigned_apk,
+    )
+    patch_apk(patch_command)
+
+    signed = not skip_signing
+    if signed:
+        if key_alias is None:
+            raise PipelineError("Signing key alias must not be empty")
+        resolved_apksigner = resolve_apksigner(apksigner)
+        resolved_keystore = resolve_default_keystore(vault_root, keystore)
+        output_apk = app_workspace / "signed" / patched_signed_asset_name(
             planned.app,
             planned.source_path,
         )
-        unsigned_apk.parent.mkdir(parents=True, exist_ok=True)
-        patch_command = prepare_morphe_patch_command(
-            cli_jar=resolved_morphe_cli_jar,
-            patches=patches_path,
-            input_apk=prepared.patch_input_apk,
-            output_apk=unsigned_apk,
+        output_apk.parent.mkdir(parents=True, exist_ok=True)
+        sign_command = prepare_sign_command(
+            apksigner=resolved_apksigner,
+            keystore=resolved_keystore,
+            key_alias=key_alias,
+            input_apk=unsigned_apk,
+            output_apk=output_apk,
+            keystore_password=keystore_password,
+            key_password=key_password,
         )
-        patch_apk(patch_command)
+        sign_apk(sign_command)
+        verify_apk(prepare_verify_command(resolved_apksigner, output_apk))
+    else:
+        output_apk = unsigned_apk
 
-        signed = not skip_signing
-        if signed:
-            if key_alias is None:
-                raise PipelineError("Signing key alias must not be empty")
-            resolved_apksigner = resolve_apksigner(apksigner)
-            resolved_keystore = resolve_default_keystore(vault_root, keystore)
-            output_apk = app_workspace / "signed" / patched_signed_asset_name(
-                planned.app,
-                planned.source_path,
-            )
-            output_apk.parent.mkdir(parents=True, exist_ok=True)
-            sign_command = prepare_sign_command(
-                apksigner=resolved_apksigner,
-                keystore=resolved_keystore,
-                key_alias=key_alias,
-                input_apk=unsigned_apk,
-                output_apk=output_apk,
-                keystore_password=keystore_password,
-                key_password=key_password,
-            )
-            sign_apk(sign_command)
-            verify_apk(prepare_verify_command(resolved_apksigner, output_apk))
-        else:
-            output_apk = unsigned_apk
-
-        results.append(
-            BuildAppResult(
-                id=planned.app.id,
-                name=planned.app.name,
-                package_name=planned.app.package_name,
-                source_path=planned.source_path,
-                patch_input_apk=prepared.patch_input_apk,
-                patches_path=patches_path,
-                unsigned_apk=unsigned_apk,
-                output_apk=output_apk,
-                signed=signed,
-                converted_source=prepared.converted,
-            )
-        )
-
-    return BuildResult(apps=tuple(results))
+    return BuildAppResult(
+        id=planned.app.id,
+        name=planned.app.name,
+        package_name=planned.app.package_name,
+        source_path=planned.source_path,
+        patch_input_apk=prepared.patch_input_apk,
+        patches_path=patches_path,
+        unsigned_apk=unsigned_apk,
+        output_apk=output_apk,
+        signed=signed,
+        converted_source=prepared.converted,
+    )
 
 
 def validate_mpp_compatibility(
@@ -241,7 +295,7 @@ def format_dry_run(result: DryRunResult) -> str:
 
 def format_build_result(result: BuildResult) -> str:
     lines = [f"Build: {len(result.apps)} app(s)"]
-    if not result.apps:
+    if not result.apps and not result.failures:
         lines.append("No enabled apps to process.")
         return "\n".join(lines)
 
@@ -260,5 +314,10 @@ def format_build_result(result: BuildResult) -> str:
                 f"   Signed: {'yes' if app.signed else 'no'}",
             ]
         )
+
+    if result.failures:
+        lines.extend(["", f"Failed: {len(result.failures)} app(s)"])
+        for failure in result.failures:
+            lines.append(f"- {failure.name} ({failure.id}): {failure.message}")
 
     return "\n".join(lines)

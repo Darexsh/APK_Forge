@@ -20,6 +20,10 @@ class SyncResult:
     publish: PublishResult
     skipped: tuple[str, ...] = ()
 
+    @property
+    def failed(self) -> bool:
+        return bool(self.build.failures)
+
 
 def sync_build_and_publish(
     config: AppsConfig,
@@ -65,9 +69,14 @@ def sync_build_and_publish(
         key_alias=key_alias,
         keystore_password=keystore_password,
         key_password=key_password,
+        continue_on_error=True,
+    )
+    successful_ids = {app.id for app in build_result.apps}
+    publish_config = config.with_apps(
+        tuple(app for app in config.enabled_apps if app.id in successful_ids)
     )
     publish_result = publish_signed_workspace_outputs(
-        config=config,
+        config=publish_config,
         vault_root=vault_root,
         workspace_root=workspace_root,
         catalog_path=catalog_path,
@@ -188,10 +197,15 @@ def _release_asset_names(repository: str, release_tag: str, github_token: str) -
 def format_sync_result(result: SyncResult) -> str:
     lines = [
         f"Build completed: {len(result.build.apps)} app(s)",
+        f"Build failed: {len(result.build.failures)} app(s)",
         f"Published: {len(result.publish.apps)} app(s)",
         f"Skipped unchanged: {len(result.skipped)} app(s)",
         f"Catalog: {result.publish.catalog_path}",
     ]
     if result.skipped:
         lines.append(f"Skipped IDs: {', '.join(result.skipped)}")
+    if result.build.failures:
+        lines.append("Failed apps:")
+        for failure in result.build.failures:
+            lines.append(f"- {failure.name} ({failure.id}): {failure.message}")
     return "\n\n".join(lines)

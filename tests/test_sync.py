@@ -8,7 +8,7 @@ from unittest.mock import patch
 from apk_forge.catalog import CatalogApp
 from apk_forge.config import parse_apps_config
 from apk_forge.planner import create_plan
-from apk_forge.pipeline import BuildResult
+from apk_forge.pipeline import BuildAppResult, BuildFailureResult, BuildResult
 from apk_forge.publish import PublishResult
 from apk_forge.sync import format_sync_result, is_planned_app_unchanged, sync_build_and_publish
 
@@ -168,6 +168,84 @@ class SyncTest(unittest.TestCase):
             )
 
         self.assertFalse(unchanged)
+
+    def test_sync_publishes_successes_and_reports_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = parse_apps_config(
+                {
+                    "schemaVersion": 1,
+                    "apps": [
+                        _app_config("good", "Good"),
+                        _app_config("bad", "Bad"),
+                    ],
+                }
+            )
+            build_result = BuildResult(
+                apps=(
+                    BuildAppResult(
+                        id="good",
+                        name="Good",
+                        package_name="com.example.good",
+                        source_path=root / "good.apk",
+                        patch_input_apk=root / "good-input.apk",
+                        patches_path=root / "patches.mpp",
+                        unsigned_apk=root / "good-unsigned.apk",
+                        output_apk=root / "good.apk",
+                        signed=True,
+                        converted_source=False,
+                    ),
+                ),
+                failures=(
+                    BuildFailureResult(
+                        id="bad",
+                        name="Bad",
+                        package_name="com.example.bad",
+                        message="bad: source APK version 1 is not compatible. Update the source APK.",
+                    ),
+                ),
+            )
+            publish_result = PublishResult(apps=(), catalog_path=root / "catalog.json")
+
+            with (
+                patch("apk_forge.sync.filter_unchanged_apps", return_value=(config, ())),
+                patch("apk_forge.sync.run_local_build", return_value=build_result),
+                patch("apk_forge.sync.publish_signed_workspace_outputs", return_value=publish_result) as publish,
+            ):
+                result = sync_build_and_publish(
+                    config=config,
+                    vault_root=root / "vault",
+                    workspace_root=root / "workspace",
+                    catalog_path=root / "catalog.json",
+                    repository="owner/repo",
+                    github_token="token",
+                    body_template_path=root / "body.md",
+                )
+
+        publish_config = publish.call_args.kwargs["config"]
+        self.assertEqual(("good",), tuple(app.id for app in publish_config.enabled_apps))
+        self.assertTrue(result.failed)
+        summary = format_sync_result(result)
+        self.assertIn("Build failed: 1 app(s)", summary)
+        self.assertIn("Bad (bad)", summary)
+
+
+def _app_config(app_id: str, name: str) -> dict:
+    return {
+        "id": app_id,
+        "name": name,
+        "packageName": f"com.example.{app_id}",
+        "enabled": True,
+        "mpp": {
+            "owner": "example",
+            "repository": "patches",
+            "path": f"{app_id}.mpp",
+        },
+        "sourceApk": {
+            "type": "vault",
+            "path": f"{app_id}.apk",
+        },
+    }
 
 
 if __name__ == "__main__":
