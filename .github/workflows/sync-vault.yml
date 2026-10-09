@@ -103,7 +103,13 @@ jobs:
 
           output_file="$GITHUB_WORKSPACE/sync-output.log"
           if [ -f "$output_file" ]; then
-            details="$(tail -c 3000 "$output_file")"
+            details="$(awk '
+              /^Build completed:/ { capture = 1 }
+              capture { print }
+            ' "$output_file")"
+            if [ -z "$details" ]; then
+              details="$(tail -c 3000 "$output_file")"
+            fi
           else
             details="No sync output was captured."
           fi
