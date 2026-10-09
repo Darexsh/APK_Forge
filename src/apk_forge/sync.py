@@ -199,6 +199,8 @@ def is_planned_app_unchanged(
         and catalog_app.release == release_tag
         and catalog_app.asset == expected_asset
         and (mpp_identifier is None or catalog_app.mpp == mpp_identifier)
+        and catalog_app.patches_enable == planned.app.patches.enable
+        and catalog_app.patches_disable == planned.app.patches.disable
         and expected_asset in release_assets
     )
 

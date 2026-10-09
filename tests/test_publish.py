@@ -57,6 +57,10 @@ class PublishTest(unittest.TestCase):
                                 "repository": "patches",
                                 "path": "example.mpp",
                             },
+                            "patches": {
+                                "enable": ["Patch A"],
+                                "disable": ["Patch B"],
+                            },
                             "sourceApk": {
                                 "type": "vault",
                                 "path": "Example_v1.2.3.apk",
@@ -86,6 +90,8 @@ class PublishTest(unittest.TestCase):
         self.assertEqual("1.2.3", catalog.apps[0].version_name)
         self.assertEqual(123, catalog.apps[0].version_code)
         self.assertEqual("example/patches:example.mpp@main", catalog.apps[0].mpp)
+        self.assertEqual(("Patch A",), catalog.apps[0].patches_enable)
+        self.assertEqual(("Patch B",), catalog.apps[0].patches_disable)
         self.assertIn("MPP: `example/patches:example.mpp@main`", client.synced_lists[-1] or "")
         self.assertIn("Published: 1 app(s)", format_publish_result(result))
 

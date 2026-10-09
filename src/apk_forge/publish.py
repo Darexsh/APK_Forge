@@ -95,6 +95,8 @@ def publish_signed_workspace_outputs(
             asset=apk_path.name,
             sha256=digest,
             mpp=mpp,
+            patches_enable=planned.app.patches.enable,
+            patches_disable=planned.app.patches.disable,
         )
         catalog = upsert_catalog_app(catalog, catalog_app)
         published.append(

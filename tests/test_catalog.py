@@ -24,6 +24,8 @@ class CatalogTest(unittest.TestCase):
                     asset="example-app-1.2.3-patched.apk",
                     sha256="a" * 64,
                     mpp="example/patches:patches-1.22.0.mpp@latest",
+                    patches_enable=("Patch A",),
+                    patches_disable=("Patch B",),
                 ),
             ),
         )

@@ -21,6 +21,8 @@ class CatalogApp:
     asset: str
     sha256: str
     mpp: str | None = None
+    patches_enable: tuple[str, ...] = ()
+    patches_disable: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         data = {
@@ -36,6 +38,11 @@ class CatalogApp:
         }
         if self.mpp is not None:
             data["mpp"] = self.mpp
+        if self.patches_enable or self.patches_disable:
+            data["patches"] = {
+                "enable": list(self.patches_enable),
+                "disable": list(self.patches_disable),
+            }
         return data
 
 
@@ -129,6 +136,8 @@ def _parse_catalog_app(index: int, data: Any) -> CatalogApp:
         asset=_required_string(data, "asset", where),
         sha256=_required_string(data, "sha256", where),
         mpp=_optional_string(data, "mpp", where),
+        patches_enable=_parse_patch_selection(data, where, "enable"),
+        patches_disable=_parse_patch_selection(data, where, "disable"),
     )
 
 
@@ -146,3 +155,20 @@ def _optional_string(data: dict[str, Any], key: str, where: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{where}.{key} must be a non-empty string")
     return value
+
+
+def _parse_patch_selection(data: dict[str, Any], where: str, key: str) -> tuple[str, ...]:
+    patches = data.get("patches")
+    if patches is None:
+        return ()
+    if not isinstance(patches, dict):
+        raise ConfigError(f"{where}.patches must be an object")
+    value = patches.get(key, [])
+    if not isinstance(value, list):
+        raise ConfigError(f"{where}.patches.{key} must be an array")
+    result: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(f"{where}.patches.{key}[{index}] must be a non-empty string")
+        result.append(item)
+    return tuple(result)
