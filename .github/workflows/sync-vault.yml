@@ -38,8 +38,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Check apksigner
+        working-directory: forge
+        run: find /usr/local/lib/android/sdk/build-tools -name apksigner -type f | sort -V | tail -n 1
 
       - name: Sync patched APKs
         working-directory: forge
