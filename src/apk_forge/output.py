@@ -26,6 +26,10 @@ def format_plan(planned_apps: tuple[PlannedApp, ...]) -> str:
 
         if app.output.asset_name is not None:
             lines.append(f"   Output asset: {app.output.asset_name}")
+        if app.patches.enable:
+            lines.append(f"   Enabled patches: {', '.join(app.patches.enable)}")
+        if app.patches.disable:
+            lines.append(f"   Disabled patches: {', '.join(app.patches.disable)}")
 
     return "\n".join(lines)
 

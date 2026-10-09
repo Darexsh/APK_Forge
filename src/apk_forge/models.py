@@ -38,6 +38,12 @@ class OutputConfig:
 
 
 @dataclass(frozen=True)
+class PatchSelection:
+    enable: tuple[str, ...] = ()
+    disable: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ManagedApp:
     id: str
     name: str
@@ -46,6 +52,7 @@ class ManagedApp:
     mpp: MppSource
     source_apk: SourceApk
     output: OutputConfig
+    patches: PatchSelection = PatchSelection()
 
 
 @dataclass(frozen=True)

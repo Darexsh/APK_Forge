@@ -46,6 +46,9 @@
         },
         "output": {
           "$ref": "#/$defs/output"
+        },
+        "patches": {
+          "$ref": "#/$defs/patches"
         }
       }
     },
@@ -142,6 +145,25 @@
           "type": "string",
           "minLength": 1
         }
+      }
+    },
+    "patches": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "$ref": "#/$defs/patchNames"
+        },
+        "disable": {
+          "$ref": "#/$defs/patchNames"
+        }
+      }
+    },
+    "patchNames": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
       }
     }
   }

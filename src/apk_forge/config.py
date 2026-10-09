@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from apk_forge.errors import ConfigError
-from apk_forge.models import AppsConfig, ManagedApp, MppSource, OutputConfig, SourceApk
+from apk_forge.models import AppsConfig, ManagedApp, MppSource, OutputConfig, PatchSelection, SourceApk
 
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _SHA256_PATTERN = re.compile(r"^[a-fA-F0-9]{64}$")
@@ -59,6 +59,7 @@ def _parse_app(index: int, data: Any) -> ManagedApp:
     mpp = _parse_mpp(data.get("mpp"), where)
     source_apk = _parse_source_apk(data.get("sourceApk"), where)
     output = _parse_output(data.get("output"), app_id, where)
+    patches = _parse_patch_selection(data.get("patches"), where)
 
     return ManagedApp(
         id=app_id,
@@ -68,6 +69,7 @@ def _parse_app(index: int, data: Any) -> ManagedApp:
         mpp=mpp,
         source_apk=source_apk,
         output=output,
+        patches=patches,
     )
 
 
@@ -134,6 +136,20 @@ def _parse_output(data: Any, app_id: str, parent: str) -> OutputConfig:
     )
 
 
+def _parse_patch_selection(data: Any, parent: str) -> PatchSelection:
+    if data is None:
+        return PatchSelection()
+
+    where = f"{parent}.patches"
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be an object")
+
+    return PatchSelection(
+        enable=_optional_string_array(data, "enable", where),
+        disable=_optional_string_array(data, "disable", where),
+    )
+
+
 def _required_string(data: dict[str, Any], key: str, where: str) -> str:
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -148,6 +164,18 @@ def _optional_string(data: dict[str, Any], key: str, default: str | None, where:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{where}.{key} must be a non-empty string")
     return value
+
+
+def _optional_string_array(data: dict[str, Any], key: str, where: str) -> tuple[str, ...]:
+    value = data.get(key, [])
+    if not isinstance(value, list):
+        raise ConfigError(f"{where}.{key} must be an array")
+    parsed: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(f"{where}.{key}[{index}] must be a non-empty string")
+        parsed.append(item)
+    return tuple(parsed)
 
 
 def _validate_unique_ids(apps: tuple[ManagedApp, ...]) -> None:

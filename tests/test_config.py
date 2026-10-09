@@ -35,6 +35,67 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(1, len(config.enabled_apps))
         self.assertEqual("managed-example-app", config.apps[0].output.release_prefix)
         self.assertEqual("main", config.apps[0].mpp.ref)
+        self.assertEqual((), config.apps[0].patches.enable)
+        self.assertEqual((), config.apps[0].patches.disable)
+
+    def test_parses_patch_selection(self) -> None:
+        config = parse_apps_config(
+            {
+                "schemaVersion": 1,
+                "apps": [
+                    {
+                        "id": "example-app",
+                        "name": "Example App",
+                        "packageName": "com.example.app",
+                        "enabled": True,
+                        "mpp": {
+                            "owner": "example",
+                            "repository": "patches",
+                            "path": "example.mpp",
+                        },
+                        "patches": {
+                            "enable": ["Patch A"],
+                            "disable": ["Patch B"],
+                        },
+                        "sourceApk": {
+                            "type": "vault",
+                            "path": "sources/example.apk",
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(("Patch A",), config.apps[0].patches.enable)
+        self.assertEqual(("Patch B",), config.apps[0].patches.disable)
+
+    def test_rejects_invalid_patch_selection(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "patches.disable must be an array"):
+            parse_apps_config(
+                {
+                    "schemaVersion": 1,
+                    "apps": [
+                        {
+                            "id": "example-app",
+                            "name": "Example App",
+                            "packageName": "com.example.app",
+                            "enabled": True,
+                            "mpp": {
+                                "owner": "example",
+                                "repository": "patches",
+                                "path": "example.mpp",
+                            },
+                            "patches": {
+                                "disable": "Patch B",
+                            },
+                            "sourceApk": {
+                                "type": "vault",
+                                "path": "sources/example.apk",
+                            },
+                        }
+                    ],
+                }
+            )
 
     def test_rejects_duplicate_ids(self) -> None:
         app = {

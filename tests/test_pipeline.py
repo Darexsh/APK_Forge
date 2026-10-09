@@ -105,6 +105,47 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(b"patched", output_bytes)
             self.assertIn("Signed: no", format_build_result(result))
 
+    def test_local_build_passes_patch_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            vault_root = root / "vault"
+            vault_root.mkdir()
+            workspace_root = root / "workspace"
+            source = vault_root / "example.apk"
+            source.write_bytes(b"fake apk")
+            patches = root / "example.mpp"
+            patches.write_bytes(b"patches")
+            config = _config_for_source(
+                "example.apk",
+                patches={
+                    "enable": ["Patch A"],
+                    "disable": ["Patch B"],
+                },
+            )
+            commands = []
+
+            def fake_patch(command) -> ProcessResult:
+                commands.append(command)
+                command.output_apk.write_bytes(b"patched")
+                return ProcessResult(args=tuple(command.as_args()), return_code=0, stdout="", stderr="")
+
+            with (
+                patch("apk_forge.pipeline.resolve_morphe_cli", return_value=root / "morphe-cli.jar"),
+                patch("apk_forge.pipeline.download_mpp", return_value=patches),
+                patch("apk_forge.pipeline.compatible_versions", return_value=("unknown",)),
+                patch("apk_forge.pipeline.patch_apk", side_effect=fake_patch),
+            ):
+                run_local_build(
+                    config=config,
+                    vault_root=vault_root,
+                    workspace_root=workspace_root,
+                    morphe_cli_jar=root / "morphe-cli.jar",
+                    skip_signing=True,
+                )
+
+        self.assertEqual(("Patch A",), commands[0].include_patches)
+        self.assertEqual(("Patch B",), commands[0].exclude_patches)
+
     def test_local_build_signs_and_verifies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -159,7 +200,7 @@ class PipelineTest(unittest.TestCase):
                 )
 
 
-def _config_for_source(source_path: str):
+def _config_for_source(source_path: str, patches=None):
     return parse_apps_config(
         {
             "schemaVersion": 1,
@@ -174,6 +215,7 @@ def _config_for_source(source_path: str):
                         "repository": "patches",
                         "path": "example.mpp",
                     },
+                    **({"patches": patches} if patches is not None else {}),
                     "sourceApk": {
                         "type": "vault",
                         "path": source_path,

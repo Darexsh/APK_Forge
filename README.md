@@ -102,6 +102,18 @@ If one app fails during `sync`, Forge continues with the remaining apps.
 Successful apps are still published, and the command exits with an error after
 printing a combined failure summary.
 
+Per-app patch selection can be configured in `apps.json` when a patch must be
+forced on or disabled:
+
+```json
+"patches": {
+  "enable": ["Patch name"],
+  "disable": ["Broken patch name"]
+}
+```
+
+`enable` maps to Morphe's include flag and `disable` maps to its disable flag.
+
 ## Useful Commands
 
 Build and sign locally without publishing:

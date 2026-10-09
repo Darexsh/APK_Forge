@@ -53,6 +53,8 @@ class BuildAppResult:
     output_apk: Path
     signed: bool
     converted_source: bool
+    enabled_patches: tuple[str, ...] = ()
+    disabled_patches: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -207,6 +209,8 @@ def build_planned_app(
         patches=patches_path,
         input_apk=prepared.patch_input_apk,
         output_apk=unsigned_apk,
+        include_patches=planned.app.patches.enable,
+        exclude_patches=planned.app.patches.disable,
     )
     patch_apk(patch_command)
 
@@ -246,6 +250,8 @@ def build_planned_app(
         output_apk=output_apk,
         signed=signed,
         converted_source=prepared.converted,
+        enabled_patches=planned.app.patches.enable,
+        disabled_patches=planned.app.patches.disable,
     )
 
 
@@ -309,6 +315,8 @@ def format_build_result(result: BuildResult) -> str:
                 f"   Patch input: {app.patch_input_apk}",
                 f"   Source converted: {'yes' if app.converted_source else 'no'}",
                 f"   MPP: {app.patches_path}",
+                f"   Enabled patches: {', '.join(app.enabled_patches) if app.enabled_patches else 'default'}",
+                f"   Disabled patches: {', '.join(app.disabled_patches) if app.disabled_patches else 'none'}",
                 f"   Unsigned APK: {app.unsigned_apk}",
                 f"   Output APK: {app.output_apk}",
                 f"   Signed: {'yes' if app.signed else 'no'}",
