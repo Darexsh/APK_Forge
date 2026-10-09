@@ -65,6 +65,9 @@
         "sha256": {
           "type": "string",
           "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "mpp": {
+          "type": "string"
         }
       }
     }

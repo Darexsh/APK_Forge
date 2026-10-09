@@ -23,6 +23,7 @@ class CatalogTest(unittest.TestCase):
                     release="managed-example-app-1.2.3",
                     asset="example-app-1.2.3-patched.apk",
                     sha256="a" * 64,
+                    mpp="example/patches:patches-1.22.0.mpp@latest",
                 ),
             ),
         )

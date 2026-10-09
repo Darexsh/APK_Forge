@@ -39,6 +39,7 @@ def sync_build_and_publish(
     key_password: str | None = "public",
     force: bool = False,
 ) -> SyncResult:
+    release_list_config = config
     skipped: tuple[str, ...] = ()
     if not force:
         config, skipped = filter_unchanged_apps(
@@ -74,6 +75,8 @@ def sync_build_and_publish(
         body_template_path=body_template_path,
         release_tag=release_tag,
         release_title=release_title,
+        release_list_config=release_list_config,
+        mpp_paths={app.id: app.patches_path for app in build_result.apps},
     )
     return SyncResult(build=build_result, publish=publish_result, skipped=skipped)
 

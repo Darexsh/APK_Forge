@@ -20,9 +20,10 @@ class CatalogApp:
     release: str
     asset: str
     sha256: str
+    mpp: str | None = None
 
     def to_json(self) -> dict[str, Any]:
-        return {
+        data = {
             "id": self.id,
             "name": self.name,
             "packageName": self.package_name,
@@ -33,6 +34,9 @@ class CatalogApp:
             "asset": self.asset,
             "sha256": self.sha256,
         }
+        if self.mpp is not None:
+            data["mpp"] = self.mpp
+        return data
 
 
 @dataclass(frozen=True)
@@ -124,11 +128,21 @@ def _parse_catalog_app(index: int, data: Any) -> CatalogApp:
         release=_required_string(data, "release", where),
         asset=_required_string(data, "asset", where),
         sha256=_required_string(data, "sha256", where),
+        mpp=_optional_string(data, "mpp", where),
     )
 
 
 def _required_string(data: dict[str, Any], key: str, where: str) -> str:
     value = data.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{where}.{key} must be a non-empty string")
+    return value
+
+
+def _optional_string(data: dict[str, Any], key: str, where: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{where}.{key} must be a non-empty string")
     return value

@@ -25,10 +25,15 @@ class ReleaseSpec:
     tag: str
     title: str
     body_template: str
+    asset_list: str | None = None
 
 
 def inject_asset_list(template: str, assets: list[dict]) -> str:
     asset_list = format_asset_list(assets)
+    return inject_asset_text(template, asset_list)
+
+
+def inject_asset_text(template: str, asset_list: str) -> str:
     if ASSET_LIST_START not in template or ASSET_LIST_END not in template:
         return "\n".join([template.rstrip(), "", ASSET_LIST_START, asset_list, ASSET_LIST_END, ""])
 
@@ -86,7 +91,10 @@ class GitHubReleaseClient:
         body = {
             "tag_name": spec.tag,
             "name": spec.title,
-            "body": inject_asset_list(spec.body_template, []),
+            "body": inject_asset_text(
+                spec.body_template,
+                spec.asset_list if spec.asset_list is not None else format_asset_list([]),
+            ),
             "draft": False,
             "prerelease": False,
             "make_latest": "false",
@@ -113,7 +121,10 @@ class GitHubReleaseClient:
         }
 
     def update_release_metadata(self, spec: ReleaseSpec, release: dict) -> dict:
-        wanted_body = inject_asset_list(spec.body_template, release.get("assets", []))
+        wanted_body = inject_asset_text(
+            spec.body_template,
+            spec.asset_list if spec.asset_list is not None else format_asset_list(release.get("assets", [])),
+        )
         if (release.get("name") or "") == spec.title and (release.get("body") or "") == wanted_body:
             return release
 
