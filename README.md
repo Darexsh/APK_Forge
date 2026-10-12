@@ -10,6 +10,7 @@
 ![Platform](https://img.shields.io/badge/Platform-GitHub%20Actions-24292f?logo=github)
 ![Scope](https://img.shields.io/badge/Scope-Public%20Engine-orange)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
+![Scheduler](https://img.shields.io/badge/Scheduler-cron--job.org-00ACC1?logo=clockify&logoColor=white)
 
 </div>
 
@@ -68,6 +69,57 @@ private release assets
 `catalog.json` describes what was actually built, published, and installable.
 
 See [VAULT.md](VAULT.md) for the expected private repository layout.
+
+
+---
+
+## ⏰ Automated Scheduling
+
+APK Forge uses [cron-job.org](https://cron-job.org/) as an external scheduler for the `Sync Vault` GitHub Actions workflow.
+
+Instead of relying on GitHub Actions' native `schedule` event, cron-job.org sends an authenticated HTTP request to the GitHub REST API. GitHub Actions then executes the complete synchronization pipeline.
+
+### Schedule
+
+| Setting | Configuration |
+| --- | --- |
+| Scheduler | [cron-job.org](https://cron-job.org/) |
+| Frequency | Daily |
+| Execution time | 07:00 |
+| Timezone | `Europe/Berlin` |
+| Trigger | GitHub REST API (`workflow_dispatch`) |
+| Workflow | `.github/workflows/sync-vault.yml` |
+| Default mode | Incremental sync (`force: false`) |
+
+The `Europe/Berlin` timezone automatically accounts for daylight saving time.
+
+### Execution Flow
+
+1. cron-job.org sends a scheduled POST request to the GitHub Actions workflow dispatch endpoint.
+2. GitHub authenticates the request using a dedicated fine-grained personal access token.
+3. The `Sync Vault` workflow is triggered with `force: false`.
+4. APK Forge checks the private vault configuration and synchronizes changed apps.
+5. Updated APKs and catalog changes are published to the private vault.
+6. GitHub Actions retains execution logs, and Telegram sends failure notifications when configured.
+
+### Manual Execution
+
+The workflow can also be started manually from the [GitHub Actions page](https://github.com/Darexsh/APK_Forge/actions/workflows/sync-vault.yml).
+
+Manual execution supports the `force` input:
+
+- `false` (default): Only rebuild apps when relevant inputs or release assets have changed.
+- `true`: Force rebuilding and republishing even when the catalog and releases appear unchanged.
+
+### Authentication & Reliability
+
+cron-job.org uses a dedicated fine-grained GitHub personal access token with **Actions: Read and write** permission limited to the `APK_Forge` repository.
+
+External scheduling avoids GitHub Actions' native cron trigger limitations, but actual workflow startup still depends on GitHub runner availability.
+
+A successful HTTP `204 No Content` response confirms that GitHub accepted the workflow dispatch request, not that the synchronization completed successfully.
+
+The scheduler token must be renewed before expiration to keep automatic synchronization running.
 
 * * *
 
