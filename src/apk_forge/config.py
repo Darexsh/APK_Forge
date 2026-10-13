@@ -20,6 +20,7 @@ def load_apps_config(path: Path) -> AppsConfig:
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Config file is not valid JSON: {exc}") from exc
 
+    data = _with_external_mpp_sources(path, data)
     return parse_apps_config(data)
 
 
@@ -35,13 +36,64 @@ def parse_apps_config(data: dict[str, Any]) -> AppsConfig:
     if not isinstance(apps_data, list):
         raise ConfigError("apps must be an array")
 
-    apps = tuple(_parse_app(index, raw_app) for index, raw_app in enumerate(apps_data))
+    mpp_sources = _parse_mpp_sources(data.get("mppSources"))
+    apps = tuple(_parse_app(index, raw_app, mpp_sources) for index, raw_app in enumerate(apps_data))
     _validate_unique_ids(apps)
     _validate_unique_packages(apps)
     return AppsConfig(schema_version=schema_version, apps=apps)
 
 
-def _parse_app(index: int, data: Any) -> ManagedApp:
+def _with_external_mpp_sources(path: Path, data: dict[str, Any]) -> dict[str, Any]:
+    mpp_sources_dir = path.parent / "mpp_sources"
+    if not mpp_sources_dir.is_dir():
+        return data
+
+    external_sources: dict[str, Any] = {}
+    for source_file in sorted(mpp_sources_dir.glob("*.json")):
+        try:
+            raw_sources = json.loads(source_file.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"{source_file} is not valid JSON: {exc}") from exc
+        if not isinstance(raw_sources, dict):
+            raise ConfigError(f"{source_file} root must be an object")
+        for key, value in raw_sources.items():
+            if key in external_sources:
+                raise ConfigError(f"Duplicate MPP source key in mpp_sources: {key}")
+            external_sources[key] = value
+
+    if not external_sources:
+        return data
+
+    merged = dict(data)
+    inline_sources = merged.get("mppSources", {})
+    if inline_sources is None:
+        inline_sources = {}
+    if not isinstance(inline_sources, dict):
+        raise ConfigError("mppSources must be an object")
+    duplicate_keys = set(external_sources).intersection(inline_sources)
+    if duplicate_keys:
+        duplicate = sorted(duplicate_keys)[0]
+        raise ConfigError(f"Duplicate MPP source key: {duplicate}")
+    merged["mppSources"] = {**external_sources, **inline_sources}
+    return merged
+
+
+def _parse_mpp_sources(data: Any) -> dict[str, MppSource]:
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigError("mppSources must be an object")
+
+    sources: dict[str, MppSource] = {}
+    for key, value in data.items():
+        where = f"mppSources.{key}"
+        if not isinstance(key, str) or not _ID_PATTERN.match(key):
+            raise ConfigError("mppSources keys must use lowercase letters, numbers, and hyphens")
+        sources[key] = _parse_mpp_object(value, where)
+    return sources
+
+
+def _parse_app(index: int, data: Any, mpp_sources: dict[str, MppSource]) -> ManagedApp:
     where = f"apps[{index}]"
     if not isinstance(data, dict):
         raise ConfigError(f"{where} must be an object")
@@ -56,7 +108,7 @@ def _parse_app(index: int, data: Any) -> ManagedApp:
     if not isinstance(enabled, bool):
         raise ConfigError(f"{where}.enabled must be a boolean")
 
-    mpp = _parse_mpp(data.get("mpp"), where)
+    mpp = _parse_mpp(data.get("mpp"), where, mpp_sources)
     source_apk = _parse_source_apk(data.get("sourceApk"), where)
     output = _parse_output(data.get("output"), app_id, where)
     patches = _parse_patch_selection(data.get("patches"), where)
@@ -73,10 +125,22 @@ def _parse_app(index: int, data: Any) -> ManagedApp:
     )
 
 
-def _parse_mpp(data: Any, parent: str) -> MppSource:
+def _parse_mpp(data: Any, parent: str, mpp_sources: dict[str, MppSource]) -> MppSource:
     where = f"{parent}.mpp"
+    if isinstance(data, str):
+        key = data.strip()
+        if not key:
+            raise ConfigError(f"{where} must be a non-empty source key")
+        try:
+            return mpp_sources[key]
+        except KeyError as exc:
+            raise ConfigError(f"{where} references unknown MPP source: {key}") from exc
+    return _parse_mpp_object(data, where)
+
+
+def _parse_mpp_object(data: Any, where: str) -> MppSource:
     if not isinstance(data, dict):
-        raise ConfigError(f"{where} must be an object")
+        raise ConfigError(f"{where} must be an object or source key")
     return MppSource(
         owner=_required_string(data, "owner", where),
         repository=_required_string(data, "repository", where),

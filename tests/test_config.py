@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from apk_forge.config import parse_apps_config
+from apk_forge.config import load_apps_config, parse_apps_config
 from apk_forge.errors import ConfigError
 
 
@@ -200,6 +203,102 @@ class ConfigTest(unittest.TestCase):
 
         self.assertIsNone(config.apps[0].mpp.path)
         self.assertEqual("latest", config.apps[0].mpp.release)
+
+    def test_parses_mpp_source_reference(self) -> None:
+        config = parse_apps_config(
+            {
+                "schemaVersion": 1,
+                "mppSources": {
+                    "main-patches": {
+                        "owner": "example",
+                        "repository": "patches",
+                        "release": "latest",
+                    }
+                },
+                "apps": [
+                    {
+                        "id": "example-app",
+                        "name": "Example App",
+                        "packageName": "com.example.app",
+                        "enabled": True,
+                        "mpp": "main-patches",
+                        "sourceApk": {
+                            "type": "vault",
+                            "path": "sources/example.apk",
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual("example", config.apps[0].mpp.owner)
+        self.assertEqual("patches", config.apps[0].mpp.repository)
+
+    def test_loads_external_mpp_sources_next_to_apps_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            sources_dir = root / "mpp_sources"
+            sources_dir.mkdir()
+            (sources_dir / "owners.json").write_text(
+                json.dumps(
+                    {
+                        "main-patches": {
+                            "owner": "example",
+                            "repository": "patches",
+                            "release": "latest",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config_path = root / "apps.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "apps": [
+                            {
+                                "id": "example-app",
+                                "name": "Example App",
+                                "packageName": "com.example.app",
+                                "enabled": True,
+                                "mpp": "main-patches",
+                                "sourceApk": {
+                                    "type": "vault",
+                                    "path": "sources/example.apk",
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_apps_config(config_path)
+
+        self.assertEqual("example", config.apps[0].mpp.owner)
+        self.assertEqual("patches", config.apps[0].mpp.repository)
+
+    def test_rejects_unknown_mpp_source_reference(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "unknown MPP source"):
+            parse_apps_config(
+                {
+                    "schemaVersion": 1,
+                    "apps": [
+                        {
+                            "id": "example-app",
+                            "name": "Example App",
+                            "packageName": "com.example.app",
+                            "enabled": True,
+                            "mpp": "missing",
+                            "sourceApk": {
+                                "type": "vault",
+                                "path": "sources/example.apk",
+                            },
+                        }
+                    ],
+                }
+            )
 
 
 if __name__ == "__main__":

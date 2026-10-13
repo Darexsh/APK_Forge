@@ -18,6 +18,9 @@ vault/
   keystore/
     public.jks
 
+  mpp_sources/
+    patches.json
+
   sources/
     example-app/
       Example_v1.2.3.apk
@@ -67,6 +70,10 @@ Forge updates only the generated asset list inside those markers.
 
 `keystore/public.jks` is the default signing key path. Commit this file only
 when it is intentionally shared signing material.
+
+`mpp_sources/*.json` contains reusable patch bundle source definitions. Apps can
+reference these definitions by key instead of repeating owner, repository,
+release, and ref values.
 
 `sources/<app-id>/` contains one manually supplied source package before it is
 published to the private `source-apks` release.
@@ -139,6 +146,19 @@ After a successful sync, commit and push `catalog.json` in the vault repository.
 
 ## Minimal apps.json
 
+Patch bundle sources can live in `mpp_sources/patches.json`:
+
+```json
+{
+  "example-patches": {
+    "owner": "example-owner",
+    "repository": "example-patches",
+    "release": "latest",
+    "ref": "main"
+  }
+}
+```
+
 For source packages stored as private release assets:
 
 ```json
@@ -150,11 +170,7 @@ For source packages stored as private release assets:
       "name": "Example App",
       "packageName": "com.example.app",
       "enabled": true,
-      "mpp": {
-        "owner": "example-owner",
-        "repository": "example-patches",
-        "release": "latest"
-      },
+      "mpp": "example-patches",
       "sourceApk": {
         "type": "githubReleaseAsset",
         "repository": "owner/private-vault",
@@ -164,6 +180,16 @@ For source packages stored as private release assets:
       }
     }
   ]
+}
+```
+
+Inline MPP objects are still supported for one-off apps:
+
+```json
+"mpp": {
+  "owner": "example-owner",
+  "repository": "example-patches",
+  "release": "latest"
 }
 ```
 
