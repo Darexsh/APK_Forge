@@ -15,6 +15,10 @@ vault/
     patched-apks-release.md
     source-apks-release.md
 
+  archive/
+    example-app/
+      ExampleApp_v1.0.0.apk
+
   keystore/
     public.jks
 
@@ -36,6 +40,7 @@ sources/**/*.apk
 sources/**/*.apkm
 sources/**/*.apks
 sources/**/*.xapk
+archive/**/*.apk
 tmp/
 ```
 
@@ -75,6 +80,9 @@ when it is intentionally shared signing material.
 reference these definitions by key instead of repeating owner, repository,
 release, and ref values.
 
+`archive/<archive-id>/` contains one APK that should be uploaded as-is to the
+private `archive-apks` release.
+
 `sources/<app-id>/` contains one manually supplied source package before it is
 published to the private `source-apks` release.
 
@@ -98,6 +106,24 @@ private release assets instead of git files.
 
 `archive-apks` stores APKs that should be published without patching, such as
 owned or internally developed apps.
+
+## Archive APK Command
+
+From the Forge repository:
+
+```bash
+python -m apk_forge archive publish \
+  --all \
+  --vault-root /path/to/vault \
+  --repo owner/private-vault \
+  --body-template /path/to/vault/docs/archive-apks-release.md
+```
+
+This scans `archive/<archive-id>/` and uploads the APKs to the private
+`archive-apks` release without patching or signing them.
+
+Use `--remove-missing` with `--all` to remove archive release assets that no
+longer exist under `archive/<archive-id>/`.
 
 ## Source Package Command
 

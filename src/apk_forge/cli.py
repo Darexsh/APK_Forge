@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from apk_forge.archive_publish import format_archive_publish_summary, publish_archive_apks
 from apk_forge.catalog import Catalog, load_catalog, write_catalog
 from apk_forge.config import load_apps_config
 from apk_forge.errors import ForgeError
@@ -51,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
             return _release(args)
         if args.command == "source":
             return _source(args)
+        if args.command == "archive":
+            return _archive(args)
         if args.command == "publish":
             return _publish(args)
         if args.command == "sync":
@@ -188,6 +191,30 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     source_publish.add_argument("--skip-upload", action="store_true")
     source_publish.add_argument("--force", action="store_true", help="upload even when asset name and SHA are unchanged")
+
+    archive = subparsers.add_parser("archive", help="manage archive APK release assets")
+    archive_subparsers = archive.add_subparsers(dest="archive_command", required=True)
+
+    archive_publish = archive_subparsers.add_parser(
+        "publish",
+        help="publish archive APKs without patching them",
+    )
+    archive_publish.add_argument("--vault-root", required=True, type=Path)
+    archive_publish.add_argument("--repo", required=True)
+    archive_publish.add_argument("--body-template", required=True, type=Path)
+    archive_publish.add_argument("--release-tag", default="archive-apks")
+    archive_publish.add_argument("--release-title", default="Archive APKs")
+    archive_publish.add_argument("--archive-id")
+    archive_publish.add_argument("--apk-path", type=Path)
+    archive_publish.add_argument("--github-token")
+    archive_publish.add_argument("--all", action="store_true", help="sync every archive from archive/<archive-id>/")
+    archive_publish.add_argument(
+        "--remove-missing",
+        action="store_true",
+        help="with --all, remove archive release assets not present in archive/<archive-id>/",
+    )
+    archive_publish.add_argument("--skip-upload", action="store_true")
+    archive_publish.add_argument("--force", action="store_true", help="upload even when asset already exists")
 
     publish = subparsers.add_parser("publish", help="publish signed workspace APKs")
     publish.add_argument("--config", required=True, type=Path)
@@ -513,6 +540,28 @@ def _source(args: argparse.Namespace) -> int:
             force=args.force,
         )
         print(format_source_publish_summary(result))
+        return 0
+
+    return 2
+
+
+def _archive(args: argparse.Namespace) -> int:
+    if args.archive_command == "publish":
+        result = publish_archive_apks(
+            vault_root=args.vault_root,
+            repository=args.repo,
+            github_token=_github_token(args) or "",
+            body_template_path=args.body_template,
+            release_tag=args.release_tag,
+            release_title=args.release_title,
+            archive_id=args.archive_id,
+            apk_path=args.apk_path,
+            all_archives=args.all,
+            skip_upload=args.skip_upload,
+            remove_missing=args.remove_missing,
+            force=args.force,
+        )
+        print(format_archive_publish_summary(result))
         return 0
 
     return 2
