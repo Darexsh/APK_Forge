@@ -196,6 +196,37 @@ class GitHubReleaseClient:
             self.update_release_metadata(spec, refreshed)
         return tuple(sorted(removed))
 
+    def prune_assets_by_name_pattern(
+        self,
+        spec: ReleaseSpec,
+        keep_names: set[str],
+        name_prefix: str,
+        name_suffix: str,
+    ) -> tuple[str, ...]:
+        try:
+            release = self.get_release(spec.repository, spec.tag)
+        except GitHubReleaseError as exc:
+            if "HTTP 404" in str(exc):
+                return ()
+            raise
+
+        removed: list[str] = []
+        for asset in release.get("assets", []):
+            asset_name = asset.get("name")
+            if not isinstance(asset_name, str):
+                continue
+            if asset_name in keep_names:
+                continue
+            if not asset_name.startswith(name_prefix) or not asset_name.endswith(name_suffix):
+                continue
+            self.github_json("DELETE", f"{API_ROOT}/repos/{spec.repository}/releases/assets/{asset.get('id')}")
+            removed.append(asset_name)
+
+        if removed:
+            refreshed = self.get_release(spec.repository, spec.tag)
+            self.update_release_metadata(spec, refreshed)
+        return tuple(sorted(removed))
+
     def upload_release_asset(self, release: dict, apk: Path) -> None:
         upload_url = release["upload_url"].replace("{?name,label}", "")
         asset_name = quote(apk.name)

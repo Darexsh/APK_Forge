@@ -18,10 +18,15 @@ class FakeReleaseClient:
     def __init__(self) -> None:
         self.published: list[tuple[str, str, Path]] = []
         self.synced_lists: list[str | None] = []
+        self.pruned: list[tuple[str, str, set[str], str, str]] = []
 
     def publish_asset(self, spec, apk: Path) -> dict:
         self.published.append((spec.repository, spec.tag, apk))
         return {"assets": [{"name": apk.name}]}
+
+    def prune_assets_by_name_pattern(self, spec, keep_names: set[str], name_prefix: str, name_suffix: str):
+        self.pruned.append((spec.repository, spec.tag, keep_names, name_prefix, name_suffix))
+        return ("example-1.2.2-patched.apk",)
 
     def ensure_release(self, spec) -> dict:
         self.synced_lists.append(spec.asset_list)
@@ -94,6 +99,16 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(("Patch B",), catalog.apps[0].patches_disable)
         self.assertIn("MPP: `example/patches:example.mpp@main`", client.synced_lists[-1] or "")
         self.assertIn("Published: 1 app(s)", format_publish_result(result))
+        self.assertEqual(
+            [(
+                "example/private-instance",
+                "patched-apks",
+                {"example-1.2.3-patched.apk"},
+                "example-",
+                "-patched.apk",
+            )],
+            client.pruned,
+        )
 
     def test_formats_patched_release_asset_list_with_mpp_source(self) -> None:
         config = parse_apps_config(

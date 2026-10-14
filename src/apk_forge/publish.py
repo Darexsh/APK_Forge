@@ -9,11 +9,7 @@ from apk_forge.errors import ForgeError
 from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec
 from apk_forge.models import AppsConfig, ManagedApp
 from apk_forge.planner import create_plan
-from apk_forge.releases import (
-    patched_signed_asset_name,
-    source_version_code,
-    source_version_name,
-)
+from apk_forge.releases import patched_signed_asset_name, source_version_code, source_version_name
 from apk_forge.source_apk import sha256_file
 
 DEFAULT_PATCHED_RELEASE_TAG = "patched-apks"
@@ -80,6 +76,13 @@ def publish_signed_workspace_outputs(
             )
 
         release_client.publish_asset(release_spec, apk_path)
+        if planned.app.output.asset_name is None:
+            release_client.prune_assets_by_name_pattern(
+                release_spec,
+                keep_names={apk_path.name},
+                name_prefix=f"{planned.app.id}-",
+                name_suffix="-patched.apk",
+            )
         version_name = source_version_name(planned.source_path)
         version_code = source_version_code(planned.source_path)
         digest = sha256_file(apk_path)
