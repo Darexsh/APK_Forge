@@ -20,9 +20,9 @@ class FakeReleaseClient:
         self.synced_lists: list[str | None] = []
         self.pruned: list[tuple[str, str, set[str], str, str]] = []
 
-    def publish_asset(self, spec, apk: Path) -> dict:
+    def publish_asset(self, spec, apk: Path, allowed_extensions=None, asset_name=None) -> dict:
         self.published.append((spec.repository, spec.tag, apk))
-        return {"assets": [{"name": apk.name}]}
+        return {"assets": [{"name": asset_name or apk.name}]}
 
     def prune_assets_by_name_pattern(self, spec, keep_names: set[str], name_prefix: str, name_suffix: str):
         self.pruned.append((spec.repository, spec.tag, keep_names, name_prefix, name_suffix))
