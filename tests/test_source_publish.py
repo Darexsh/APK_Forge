@@ -23,9 +23,9 @@ class FakeReleaseClient:
     def release_asset_names(self, repository: str, tag: str) -> set[str]:
         return set(self.asset_names)
 
-    def publish_asset(self, spec, apk: Path, allowed_extensions=None) -> dict:
+    def publish_asset(self, spec, apk: Path, allowed_extensions=None, asset_name=None) -> dict:
         self.published.append(apk)
-        self.asset_names.add(apk.name)
+        self.asset_names.add(asset_name or apk.name)
         return {"assets": [{"name": name} for name in sorted(self.asset_names)]}
 
     def remove_asset_by_name(self, spec, asset_name: str) -> bool:
