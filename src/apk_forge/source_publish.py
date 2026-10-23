@@ -271,7 +271,7 @@ def _publish_one_source(
     return SourcePublishResult(
         action=action,
         app_id=app_id,
-        asset=source_package.name,
+        asset=remote_asset_name,
         sha256=digest,
         icon=icon_path.name if icon_path is not None else None,
     )
