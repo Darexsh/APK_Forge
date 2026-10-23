@@ -30,27 +30,36 @@ def source_version_name(source_path: Path) -> str:
     return "unknown"
 
 
-def source_version_code(source_path: Path) -> int:
-    version_name = source_version_name(source_path)
+def resolved_source_version_name(app: ManagedApp, source_path: Path) -> str:
+    return app.source_apk.version_name or source_version_name(source_path)
+
+
+def source_version_code(source_path: Path, version_name: str | None = None) -> int:
+    version_name = version_name or source_version_name(source_path)
     digits = "".join(ch for ch in version_name if ch.isdigit())
     if not digits:
         return 0
     return int(digits[:9])
 
 
-def patched_unsigned_asset_name(app: ManagedApp, source_path: Path) -> str:
-    return f"{app.id}-{source_version_name(source_path)}-patched-unsigned.apk"
+def patched_unsigned_asset_name(
+    app: ManagedApp,
+    source_path: Path,
+    version_name: str | None = None,
+) -> str:
+    return f"{app.id}-{version_name or resolved_source_version_name(app, source_path)}-patched-unsigned.apk"
 
 
-def patched_signed_asset_name(app: ManagedApp, source_path: Path) -> str:
-    return managed_asset_name(app, source_version_name(source_path))
+def patched_signed_asset_name(
+    app: ManagedApp,
+    source_path: Path,
+    version_name: str | None = None,
+) -> str:
+    return managed_asset_name(app, version_name or resolved_source_version_name(app, source_path))
 
 
 def normalize_version_name(version: str) -> str:
     version = version.strip()
-    build_version = re.fullmatch(r"(\d+(?:\.\d+)+)[._\s]+build[._\s-]?(\d+)", version, re.IGNORECASE)
-    if build_version:
-        return f"{build_version.group(1)} build{build_version.group(2)}"
     # Some source filenames use an underscore where upstream version names use
     # a plus sign, such as ReadEra's 26.09.29+2320.
     date_build = re.fullmatch(r"(\d+(?:\.\d+){2})[_+](\d+)", version)

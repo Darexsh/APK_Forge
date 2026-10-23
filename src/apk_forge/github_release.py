@@ -19,6 +19,11 @@ class GitHubReleaseError(ForgeError):
     """Raised when a GitHub release operation fails."""
 
 
+def github_asset_name(name: str) -> str:
+    """Return the filename GitHub stores when it replaces spaces in assets."""
+    return name.replace(" ", ".")
+
+
 @dataclass(frozen=True)
 class ReleaseSpec:
     repository: str
@@ -85,7 +90,7 @@ class GitHubReleaseClient:
         if not apk.is_file():
             raise GitHubReleaseError(f"Release asset does not exist: {apk}")
 
-        upload_name = asset_name or apk.name
+        upload_name = github_asset_name(asset_name or apk.name)
         release = self.ensure_release(spec)
         self.remove_existing_asset(spec.repository, release, upload_name)
         self.upload_release_asset(release, apk, upload_name)

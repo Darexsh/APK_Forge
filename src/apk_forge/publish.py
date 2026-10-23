@@ -6,10 +6,14 @@ from pathlib import Path
 from apk_forge.catalog import Catalog, CatalogApp, load_catalog, upsert_catalog_app, write_catalog
 from apk_forge.config import load_apps_config
 from apk_forge.errors import ForgeError
-from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec
+from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec, github_asset_name
 from apk_forge.models import AppsConfig, ManagedApp
 from apk_forge.planner import create_plan
-from apk_forge.releases import patched_signed_asset_name, source_version_code, source_version_name
+from apk_forge.releases import (
+    patched_signed_asset_name,
+    resolved_source_version_name,
+    source_version_code,
+)
 from apk_forge.source_apk import sha256_file
 
 DEFAULT_PATCHED_RELEASE_TAG = "patched-apks"
@@ -65,9 +69,9 @@ def publish_signed_workspace_outputs(
     published = []
 
     for planned in create_plan(config, vault_root, github_token, workspace_root):
+        version_name = resolved_source_version_name(planned.app, planned.source_path)
         apk_path = workspace_root / "build" / planned.app.id / "signed" / patched_signed_asset_name(
-            planned.app,
-            planned.source_path,
+            planned.app, planned.source_path, version_name
         )
         if not apk_path.is_file():
             raise PublishError(
@@ -75,16 +79,16 @@ def publish_signed_workspace_outputs(
                 "Run the build without --skip-signing before publishing."
             )
 
-        release_client.publish_asset(release_spec, apk_path)
+        published_asset_name = github_asset_name(apk_path.name)
+        release_client.publish_asset(release_spec, apk_path, asset_name=published_asset_name)
         if planned.app.output.asset_name is None:
             release_client.prune_assets_by_name_pattern(
                 release_spec,
-                keep_names={apk_path.name},
+                keep_names={published_asset_name},
                 name_prefix=f"{planned.app.id}-",
                 name_suffix="-patched.apk",
             )
-        version_name = source_version_name(planned.source_path)
-        version_code = source_version_code(planned.source_path)
+        version_code = source_version_code(planned.source_path, version_name)
         digest = sha256_file(apk_path)
         mpp = format_mpp_source(planned.app, (mpp_paths or {}).get(planned.app.id))
         catalog_app = CatalogApp(
@@ -95,7 +99,7 @@ def publish_signed_workspace_outputs(
             version_code=version_code,
             type="managed",
             release=release_tag,
-            asset=apk_path.name,
+            asset=published_asset_name,
             sha256=digest,
             mpp=mpp,
             patches_enable=planned.app.patches.enable,
@@ -111,7 +115,7 @@ def publish_signed_workspace_outputs(
                 version_name=version_name,
                 version_code=version_code,
                 release=release_tag,
-                asset=apk_path.name,
+                asset=published_asset_name,
                 apk_path=apk_path,
                 sha256=digest,
             )

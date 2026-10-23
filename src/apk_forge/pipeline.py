@@ -11,7 +11,11 @@ from apk_forge.models import AppsConfig, PlannedApp
 from apk_forge.morphe import patch_apk, prepare_morphe_patch_command
 from apk_forge.mpp import compatible_versions, download_mpp
 from apk_forge.planner import create_plan
-from apk_forge.releases import patched_signed_asset_name, patched_unsigned_asset_name, source_version_name
+from apk_forge.releases import (
+    patched_signed_asset_name,
+    patched_unsigned_asset_name,
+    resolved_source_version_name,
+)
 from apk_forge.signing import (
     prepare_sign_command,
     prepare_verify_command,
@@ -206,13 +210,14 @@ def build_planned_app(
         morphe_cli_jar=resolved_morphe_cli_jar,
         patches=patches_path,
         package_name=planned.app.package_name,
-        source_version=source_version_name(planned.source_path),
+        source_version=resolved_source_version_name(planned.app, planned.source_path),
         app_id=planned.app.id,
     )
 
     unsigned_apk = app_workspace / "unsigned" / patched_unsigned_asset_name(
         planned.app,
         planned.source_path,
+        resolved_source_version_name(planned.app, planned.source_path),
     )
     unsigned_apk.parent.mkdir(parents=True, exist_ok=True)
     patch_command = prepare_morphe_patch_command(

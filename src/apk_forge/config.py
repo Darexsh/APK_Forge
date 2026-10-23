@@ -186,6 +186,7 @@ def _parse_source_apk(data: Any, parent: str) -> SourceApk:
             type=source_type,
             path=_required_string(data, "path", where),
             sha256=sha256,
+            version_name=_optional_string(data, "versionName", None, where),
         )
 
     if source_type == "githubReleaseAsset":
@@ -195,6 +196,7 @@ def _parse_source_apk(data: Any, parent: str) -> SourceApk:
             release=_required_string(data, "release", where),
             asset=_required_string(data, "asset", where),
             sha256=sha256,
+            version_name=_optional_string(data, "versionName", None, where),
         )
 
     raise ConfigError(f"{where}.type must be 'vault' or 'githubReleaseAsset'")

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apk_forge.errors import ForgeError
-from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec
+from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec, github_asset_name
+from apk_forge.releases import source_version_name
 from apk_forge.source_apk import SOURCE_PACKAGE_EXTENSIONS, sha256_file
 from apk_forge.source_icon import extract_source_icon
 
@@ -203,8 +204,9 @@ def _publish_one_source(
         vault_root / "tmp" / "source-icons",
     )
     digest = sha256_file(source_package)
+    version_name = source_version_name(source_package)
     icon_digest = sha256_file(icon_path) if icon_path is not None else None
-    remote_asset_name = source_package.name.replace(" ", ".")
+    remote_asset_name = github_asset_name(source_package.name)
     icon_unchanged = _source_icon_config_matches(
         app,
         icon_path.name if icon_path is not None else None,
@@ -250,15 +252,16 @@ def _publish_one_source(
         release_tag=release_spec.tag,
         asset=remote_asset_name,
         digest=digest,
+        version_name=version_name,
         icon_asset=icon_path.name if icon_path is not None else None,
         icon_digest=icon_digest,
     )
     if (
         release_client is not None
         and previous_asset is not None
-        and previous_asset.replace(" ", ".") != remote_asset_name
+        and github_asset_name(previous_asset) != remote_asset_name
     ):
-        release_client.remove_asset_by_name(release_spec, previous_asset.replace(" ", "."))
+        release_client.remove_asset_by_name(release_spec, github_asset_name(previous_asset))
 
     if skip_upload:
         action = "unchanged" if unchanged else "configured"
@@ -366,7 +369,12 @@ def _find_app(config: dict, app_id: str, config_path: Path) -> dict:
     return matches[0]
 
 
-def _source_config_matches(app: dict, spec: ReleaseSpec, asset: str, digest: str) -> bool:
+def _source_config_matches(
+    app: dict,
+    spec: ReleaseSpec,
+    asset: str,
+    digest: str,
+) -> bool:
     current = app.get("sourceApk", {})
     return (
         isinstance(current, dict)
@@ -412,6 +420,7 @@ def _update_source_config(
     release_tag: str,
     asset: str,
     digest: str,
+    version_name: str,
     icon_asset: str | None,
     icon_digest: str | None,
 ) -> None:
@@ -422,6 +431,7 @@ def _update_source_config(
         "release": release_tag,
         "asset": asset,
         "sha256": digest,
+        "versionName": version_name,
     }
     if icon_asset is not None and icon_digest is not None:
         app["icon"] = {

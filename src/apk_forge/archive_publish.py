@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apk_forge.errors import ForgeError
-from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec
+from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec, github_asset_name
 from apk_forge.source_apk import sha256_file
 from apk_forge.source_icon import IMAGE_SUFFIXES, extract_source_icon
 
@@ -181,12 +181,18 @@ def _publish_one_archive(
     remote_has_icon = False
 
     if release_client is not None:
-        remote_has_asset = apk.name in release_client.release_asset_names(
+        remote_asset_name = github_asset_name(apk.name)
+        remote_has_asset = remote_asset_name in release_client.release_asset_names(
             release_spec.repository,
             release_spec.tag,
         )
         if force or not remote_has_asset:
-            release_client.publish_asset(release_spec, apk, ARCHIVE_APK_EXTENSIONS)
+            release_client.publish_asset(
+                release_spec,
+                apk,
+                ARCHIVE_APK_EXTENSIONS,
+                asset_name=remote_asset_name,
+            )
         if icon_path is not None:
             remote_has_icon = icon_path.name in release_client.release_asset_names(
                 icon_release_spec.repository,
@@ -208,7 +214,7 @@ def _publish_one_archive(
     return ArchivePublishResult(
         action=action,
         archive_id=archive_id,
-        asset=apk.name,
+        asset=github_asset_name(apk.name),
         icon=icon_path.name if icon_path is not None else None,
     )
 

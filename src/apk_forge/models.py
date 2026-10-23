@@ -22,6 +22,7 @@ class SourceApk:
     release: str | None = None
     asset: str | None = None
     sha256: str | None = None
+    version_name: str | None = None
 
     def resolve(self, vault_root: Path) -> Path:
         if self.type != "vault":
