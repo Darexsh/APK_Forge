@@ -6,8 +6,8 @@ from pathlib import Path
 from apk_forge.models import ManagedApp
 
 _VERSION_MARKERS = (
-    re.compile(r"(?:^|[_\-\s])v(?P<version>\d+(?:[._+-]\w+)*(?:\.build\d+)?)$", re.IGNORECASE),
-    re.compile(r"(?:^|[_\-\s])(?P<version>\d+(?:[._+-]\w+)*(?:\.build\d+)?)$", re.IGNORECASE),
+    re.compile(r"(?:^|[_\-\s])v(?P<version>\d+(?:[._+-]\w+)*(?:[._\s]build\d+)?)$", re.IGNORECASE),
+    re.compile(r"(?:^|[_\-\s])(?P<version>\d+(?:[._+-]\w+)*(?:[._\s]build\d+)?)$", re.IGNORECASE),
 )
 
 
@@ -48,6 +48,9 @@ def patched_signed_asset_name(app: ManagedApp, source_path: Path) -> str:
 
 def normalize_version_name(version: str) -> str:
     version = version.strip()
+    build_version = re.fullmatch(r"(\d+(?:\.\d+)+)[._\s]+build[._\s-]?(\d+)", version, re.IGNORECASE)
+    if build_version:
+        return f"{build_version.group(1)} build{build_version.group(2)}"
     # Some source filenames use an underscore where upstream version names use
     # a plus sign, such as ReadEra's 26.09.29+2320.
     date_build = re.fullmatch(r"(\d+(?:\.\d+){2})[_+](\d+)", version)
