@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from apk_forge.source_apk import sha256_file
@@ -40,6 +41,45 @@ class FakeReleaseClient:
 
 
 class SourcePublishTest(unittest.TestCase):
+    def test_republishes_changed_icon_without_reuploading_unchanged_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path, vault_root, body_template = self._write_vault(root)
+            package = vault_root / "sources" / "example" / "Example_v1.2.3.apkm"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("icon.png", b"new-icon")
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            source_digest = sha256_file(package)
+            config["apps"][0]["sourceApk"] = {
+                "type": "githubReleaseAsset",
+                "repository": "owner/private-vault",
+                "release": "source-apks",
+                "asset": package.name,
+                "sha256": source_digest,
+            }
+            config["apps"][0]["icon"] = {
+                "release": "app-icons",
+                "asset": "example-icon.png",
+                "sha256": "old-icon-digest",
+            }
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            client = FakeReleaseClient({package.name, "example-icon.png"})
+
+            publish_source_packages(
+                config_path=config_path,
+                vault_root=vault_root,
+                repository="owner/private-vault",
+                github_token="token",
+                body_template_path=body_template,
+                app_id="example",
+                client=client,
+            )
+            updated = json.loads(config_path.read_text(encoding="utf-8"))
+            icon_digest = sha256_file(vault_root / "tmp" / "source-icons" / "example-icon.png")
+
+        self.assertEqual([vault_root / "tmp" / "source-icons" / "example-icon.png"], client.published)
+        self.assertEqual(icon_digest, updated["apps"][0]["icon"]["sha256"])
+
     def test_publishes_source_package_and_updates_apps_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

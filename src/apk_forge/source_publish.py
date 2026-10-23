@@ -204,6 +204,11 @@ def _publish_one_source(
     )
     digest = sha256_file(source_package)
     icon_digest = sha256_file(icon_path) if icon_path is not None else None
+    icon_unchanged = _source_icon_config_matches(
+        app,
+        icon_path.name if icon_path is not None else None,
+        icon_digest,
+    )
     unchanged = _source_config_matches(app, release_spec, source_package.name, digest)
     previous_asset = _configured_source_asset(app, release_spec)
     remote_has_asset = False
@@ -220,7 +225,7 @@ def _publish_one_source(
                 icon_release_spec.repository,
                 icon_release_spec.tag,
             )
-            if force or not unchanged or not icon_exists_remotely:
+            if force or not icon_unchanged or not icon_exists_remotely:
                 release_client.publish_asset(
                     icon_release_spec,
                     icon_path,
@@ -251,7 +256,7 @@ def _publish_one_source(
 
     if skip_upload:
         action = "unchanged" if unchanged else "configured"
-    elif unchanged and remote_has_asset and not force:
+    elif unchanged and remote_has_asset and icon_unchanged and not force:
         action = "unchanged"
     elif unchanged and not remote_has_asset:
         action = "uploaded missing remote"
@@ -362,6 +367,19 @@ def _source_config_matches(app: dict, spec: ReleaseSpec, asset: str, digest: str
         and current.get("type") == "githubReleaseAsset"
         and current.get("repository") == spec.repository
         and current.get("release") == spec.tag
+        and current.get("asset") == asset
+        and current.get("sha256") == digest
+    )
+
+
+def _source_icon_config_matches(app: dict, asset: str | None, digest: str | None) -> bool:
+    if asset is None or digest is None:
+        return True
+    current = app.get("icon", {})
+    if not isinstance(current, dict):
+        return False
+    return (
+        current.get("release") == DEFAULT_ICON_RELEASE_TAG
         and current.get("asset") == asset
         and current.get("sha256") == digest
     )

@@ -46,6 +46,10 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Install Forge dependencies
+        working-directory: forge
+        run: python -m pip install .
+
       - name: Check apksigner
         working-directory: forge
         run: find /usr/local/lib/android/sdk/build-tools -name apksigner -type f | sort -V | tail -n 1
