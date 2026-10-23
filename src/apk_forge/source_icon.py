@@ -249,17 +249,24 @@ def _render_vector_icon(aapt: str, apk_path: Path, xml_member: str, app_id: str,
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{app_id}-icon.png"
         try:
-            import cairosvg
+            import resvg_py
 
-            cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=str(output_path))
+            output_path.write_bytes(
+                resvg_py.svg_to_bytes(svg_string=svg, width=512, height=512)
+            )
         except ImportError:
-            converter = shutil.which("magick") or shutil.which("convert")
-            if converter is None:
-                return None
-            command = [converter, "-", str(output_path)] if Path(converter).name == "magick" else [converter, "svg:-", str(output_path)]
-            result = subprocess.run(command, input=svg, text=True, capture_output=True, check=False)
-            if result.returncode != 0 or not output_path.is_file():
-                return None
+            try:
+                import cairosvg
+
+                cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=str(output_path))
+            except (ImportError, OSError):
+                converter = shutil.which("magick") or shutil.which("convert")
+                if converter is None:
+                    return None
+                command = [converter, "-", str(output_path)] if Path(converter).name == "magick" else [converter, "svg:-", str(output_path)]
+                result = subprocess.run(command, input=svg, text=True, capture_output=True, check=False)
+                if result.returncode != 0 or not output_path.is_file():
+                    return None
         from PIL import Image
 
         with Image.open(output_path) as rendered_image:
