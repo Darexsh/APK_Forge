@@ -77,6 +77,7 @@ class GitHubReleaseClient:
         spec: ReleaseSpec,
         apk: Path,
         allowed_extensions: set[str] | None = None,
+        asset_name: str | None = None,
     ) -> dict:
         allowed = allowed_extensions or {".apk"}
         if apk.suffix.lower() not in allowed:
@@ -84,9 +85,10 @@ class GitHubReleaseClient:
         if not apk.is_file():
             raise GitHubReleaseError(f"Release asset does not exist: {apk}")
 
+        upload_name = asset_name or apk.name
         release = self.ensure_release(spec)
-        self.remove_existing_asset(spec.repository, release, apk.name)
-        self.upload_release_asset(release, apk)
+        self.remove_existing_asset(spec.repository, release, upload_name)
+        self.upload_release_asset(release, apk, upload_name)
         refreshed = self.get_release(spec.repository, spec.tag)
         self.update_release_metadata(spec, refreshed)
         return self.get_release(spec.repository, spec.tag)
@@ -246,11 +248,11 @@ class GitHubReleaseClient:
             self.update_release_metadata(spec, refreshed)
         return tuple(sorted(removed))
 
-    def upload_release_asset(self, release: dict, apk: Path) -> None:
+    def upload_release_asset(self, release: dict, apk: Path, asset_name: str | None = None) -> None:
         upload_url = release["upload_url"].replace("{?name,label}", "")
-        asset_name = quote(apk.name)
+        quoted_name = quote(asset_name or apk.name)
         request = Request(
-            f"{upload_url}?name={asset_name}",
+            f"{upload_url}?name={quoted_name}",
             method="POST",
             data=apk.read_bytes(),
             headers={

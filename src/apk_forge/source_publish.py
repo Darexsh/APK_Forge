@@ -204,22 +204,28 @@ def _publish_one_source(
     )
     digest = sha256_file(source_package)
     icon_digest = sha256_file(icon_path) if icon_path is not None else None
+    remote_asset_name = source_package.name.replace(" ", ".")
     icon_unchanged = _source_icon_config_matches(
         app,
         icon_path.name if icon_path is not None else None,
         icon_digest,
     )
-    unchanged = _source_config_matches(app, release_spec, source_package.name, digest)
+    unchanged = _source_config_matches(app, release_spec, remote_asset_name, digest)
     previous_asset = _configured_source_asset(app, release_spec)
     remote_has_asset = False
 
     if release_client is not None:
-        remote_has_asset = source_package.name in release_client.release_asset_names(
+        remote_has_asset = remote_asset_name in release_client.release_asset_names(
             release_spec.repository,
             release_spec.tag,
         )
         if force or not unchanged or not remote_has_asset:
-            release_client.publish_asset(release_spec, source_package, SOURCE_PACKAGE_EXTENSIONS)
+            release_client.publish_asset(
+                release_spec,
+                source_package,
+                SOURCE_PACKAGE_EXTENSIONS,
+                asset_name=remote_asset_name,
+            )
         if icon_path is not None:
             icon_exists_remotely = icon_path.name in release_client.release_asset_names(
                 icon_release_spec.repository,
@@ -242,7 +248,7 @@ def _publish_one_source(
         app_id=app_id,
         repository=release_spec.repository,
         release_tag=release_spec.tag,
-        asset=source_package.name,
+        asset=remote_asset_name,
         digest=digest,
         icon_asset=icon_path.name if icon_path is not None else None,
         icon_digest=icon_digest,
@@ -250,9 +256,9 @@ def _publish_one_source(
     if (
         release_client is not None
         and previous_asset is not None
-        and previous_asset != source_package.name
+        and previous_asset.replace(" ", ".") != remote_asset_name
     ):
-        release_client.remove_asset_by_name(release_spec, previous_asset)
+        release_client.remove_asset_by_name(release_spec, previous_asset.replace(" ", "."))
 
     if skip_upload:
         action = "unchanged" if unchanged else "configured"
