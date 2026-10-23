@@ -376,8 +376,20 @@ def _find_aapt() -> str | None:
     on_path = shutil.which(executable)
     if on_path:
         return on_path
-    roots = [os.environ.get("ANDROID_SDK_ROOT"), os.environ.get("ANDROID_HOME"), "/opt/android-sdk", "/usr/local/lib/android/sdk"]
+    roots = [os.environ.get("ANDROID_SDK_ROOT"), os.environ.get("ANDROID_HOME")]
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            roots.append(str(Path(local_app_data) / "Android" / "Sdk"))
+        roots.append(str(Path.home() / "AppData" / "Local" / "Android" / "Sdk"))
+    else:
+        roots.extend(("/opt/android-sdk", "/usr/local/lib/android/sdk"))
+    seen_roots: set[str] = set()
     for root in filter(None, roots):
+        normalized_root = os.path.normcase(os.path.abspath(root))
+        if normalized_root in seen_roots:
+            continue
+        seen_roots.add(normalized_root)
         build_tools = Path(root) / "build-tools"
         if build_tools.is_dir():
             candidates = sorted(build_tools.glob(f"*/{executable}"), reverse=True)

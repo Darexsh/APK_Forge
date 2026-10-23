@@ -470,7 +470,9 @@ def format_source_publish_summary(summary: SourcePublishSummary) -> str:
         if result.asset and result.sha256:
             lines.append(f"{result.action}: {result.app_id} -> {result.asset} ({result.sha256})")
             if result.icon:
-                lines.append(f"  Icon: {result.icon}")
+                lines.append(f"  Icon extracted: {result.icon}")
+            else:
+                lines.append("  Icon extracted: no")
         elif result.asset:
             lines.append(f"{result.action}: {result.asset}")
         else:
