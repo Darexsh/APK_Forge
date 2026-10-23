@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -282,7 +283,9 @@ def validate_mpp_compatibility(
     versions = compatible_versions(morphe_cli_jar, patches, package_name)
     if any(version.lower() == "any" for version in versions):
         return
-    if source_version in versions:
+    if _normalize_compatibility_version(source_version) in {
+        _normalize_compatibility_version(version) for version in versions
+    }:
         return
     if not versions:
         raise PipelineError(
@@ -293,6 +296,11 @@ def validate_mpp_compatibility(
         f"{app_id}: source APK version {source_version} is not compatible with {patches.name}. "
         f"Compatible versions: {', '.join(versions)}. Update the source APK or choose a matching MPP file."
     )
+
+
+def _normalize_compatibility_version(version: str) -> str:
+    normalized = re.sub(r"[._\s-]+build(?=\d)", ".build", version.strip(), flags=re.IGNORECASE)
+    return normalized.casefold()
 
 
 def format_dry_run(result: DryRunResult) -> str:
