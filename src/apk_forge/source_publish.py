@@ -7,9 +7,17 @@ from pathlib import Path
 from apk_forge.errors import ForgeError
 from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec
 from apk_forge.source_apk import SOURCE_PACKAGE_EXTENSIONS, sha256_file
+from apk_forge.source_icon import extract_source_icon
 
 DEFAULT_SOURCE_RELEASE_TAG = "source-apks"
 DEFAULT_SOURCE_RELEASE_TITLE = "Source APKs"
+DEFAULT_ICON_RELEASE_TAG = "app-icons"
+DEFAULT_ICON_RELEASE_TITLE = "App Icons"
+SOURCE_ICON_EXTENSIONS = {".png", ".webp", ".jpg", ".jpeg"}
+DEFAULT_ICON_RELEASE_BODY = (
+    "### Application Icons\n\n"
+    "Icon image assets used by the application catalog. These files are not installable packages.\n"
+)
 
 
 class SourcePublishError(ForgeError):
@@ -22,6 +30,7 @@ class SourcePublishResult:
     app_id: str
     asset: str | None = None
     sha256: str | None = None
+    icon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +66,7 @@ def publish_source_packages(
     config = _load_raw_config(config_path)
     release_spec = _release_spec(repository, release_tag, release_title, body_template_path)
     release_client = None if skip_upload else client if client is not None else GitHubReleaseClient(github_token)
+    icon_release_spec = _icon_release_spec(repository, vault_root)
 
     if all_apps:
         results = _publish_all_sources(
@@ -68,6 +78,7 @@ def publish_source_packages(
             skip_upload=skip_upload,
             remove_missing=remove_missing,
             force=force,
+            icon_release_spec=icon_release_spec,
         )
     else:
         results = (
@@ -81,8 +92,21 @@ def publish_source_packages(
                 release_client=release_client,
                 skip_upload=skip_upload,
                 force=force,
+                icon_release_spec=icon_release_spec,
             ),
         )
+
+    if release_client is not None:
+        for asset_name in release_client.release_asset_names(repository, release_tag):
+            if Path(asset_name).suffix.lower() in SOURCE_ICON_EXTENSIONS:
+                release_client.remove_asset_by_name(release_spec, asset_name)
+        if all_apps and remove_missing:
+            current_config = _load_raw_config(config_path)
+            release_client.prune_assets(
+                icon_release_spec,
+                _referenced_icon_assets(current_config),
+                SOURCE_ICON_EXTENSIONS,
+            )
 
     return SourcePublishSummary(results=tuple(results), config_path=config_path)
 
@@ -97,6 +121,7 @@ def _publish_all_sources(
     skip_upload: bool,
     remove_missing: bool,
     force: bool,
+    icon_release_spec: ReleaseSpec,
 ) -> tuple[SourcePublishResult, ...]:
     configured_ids = {
         app.get("id")
@@ -134,6 +159,7 @@ def _publish_all_sources(
                 release_client=release_client,
                 skip_upload=skip_upload,
                 force=force,
+                icon_release_spec=icon_release_spec,
             )
         )
         config = _load_raw_config(config_path)
@@ -167,10 +193,17 @@ def _publish_one_source(
     release_client: GitHubReleaseClient | None,
     skip_upload: bool,
     force: bool,
+    icon_release_spec: ReleaseSpec,
 ) -> SourcePublishResult:
     app = _find_app(config, app_id, config_path)
     source_package = _resolve_source_package(vault_root, app_id, source_package_path)
+    icon_path = extract_source_icon(
+        source_package,
+        app_id,
+        vault_root / "tmp" / "source-icons",
+    )
     digest = sha256_file(source_package)
+    icon_digest = sha256_file(icon_path) if icon_path is not None else None
     unchanged = _source_config_matches(app, release_spec, source_package.name, digest)
     previous_asset = _configured_source_asset(app, release_spec)
     remote_has_asset = False
@@ -182,6 +215,21 @@ def _publish_one_source(
         )
         if force or not unchanged or not remote_has_asset:
             release_client.publish_asset(release_spec, source_package, SOURCE_PACKAGE_EXTENSIONS)
+        if icon_path is not None:
+            icon_exists_remotely = icon_path.name in release_client.release_asset_names(
+                icon_release_spec.repository,
+                icon_release_spec.tag,
+            )
+            if force or not unchanged or not icon_exists_remotely:
+                release_client.publish_asset(
+                    icon_release_spec,
+                    icon_path,
+                    SOURCE_ICON_EXTENSIONS,
+                )
+            for extension in SOURCE_ICON_EXTENSIONS:
+                previous_icon = f"{app_id}-icon{extension}"
+                if previous_icon != icon_path.name:
+                    release_client.remove_asset_by_name(icon_release_spec, previous_icon)
 
     _update_source_config(
         config=config,
@@ -191,6 +239,8 @@ def _publish_one_source(
         release_tag=release_spec.tag,
         asset=source_package.name,
         digest=digest,
+        icon_asset=icon_path.name if icon_path is not None else None,
+        icon_digest=icon_digest,
     )
     if (
         release_client is not None
@@ -207,7 +257,13 @@ def _publish_one_source(
         action = "uploaded missing remote"
     else:
         action = "updated"
-    return SourcePublishResult(action=action, app_id=app_id, asset=source_package.name, sha256=digest)
+    return SourcePublishResult(
+        action=action,
+        app_id=app_id,
+        asset=source_package.name,
+        sha256=digest,
+        icon=icon_path.name if icon_path is not None else None,
+    )
 
 
 def _resolve_source_package(vault_root: Path, app_id: str, source_package_path: Path | None) -> Path:
@@ -250,6 +306,23 @@ def _release_spec(
         tag=release_tag,
         title=release_title,
         body_template=body_template_path.read_text(encoding="utf-8"),
+    )
+
+
+def _icon_release_spec(repository: str, vault_root: Path) -> ReleaseSpec:
+    template_path = vault_root / "docs" / "app-icons-release.md"
+    body_template = (
+        template_path.read_text(encoding="utf-8")
+        if template_path.is_file()
+        else DEFAULT_ICON_RELEASE_BODY
+    )
+    return ReleaseSpec(
+        repository=repository,
+        tag=DEFAULT_ICON_RELEASE_TAG,
+        title=DEFAULT_ICON_RELEASE_TITLE,
+        body_template=body_template,
+        asset_extensions=frozenset(SOURCE_ICON_EXTENSIONS),
+        empty_asset_message="No application icons published yet.",
     )
 
 
@@ -315,6 +388,8 @@ def _update_source_config(
     release_tag: str,
     asset: str,
     digest: str,
+    icon_asset: str | None,
+    icon_digest: str | None,
 ) -> None:
     app = _find_app(config, app_id, config_path)
     app["sourceApk"] = {
@@ -324,6 +399,12 @@ def _update_source_config(
         "asset": asset,
         "sha256": digest,
     }
+    if icon_asset is not None and icon_digest is not None:
+        app["icon"] = {
+            "release": DEFAULT_ICON_RELEASE_TAG,
+            "asset": icon_asset,
+            "sha256": icon_digest,
+        }
     _save_raw_config(config_path, config)
 
 
@@ -356,11 +437,22 @@ def _referenced_source_assets(config: dict, repository: str, release_tag: str) -
     return assets
 
 
+def _referenced_icon_assets(config: dict) -> set[str]:
+    return {
+        f"{app['id']}-icon{extension}"
+        for app in config.get("apps", [])
+        if isinstance(app, dict) and isinstance(app.get("id"), str)
+        for extension in SOURCE_ICON_EXTENSIONS
+    }
+
+
 def format_source_publish_summary(summary: SourcePublishSummary) -> str:
     lines = [f"Source sync: {len(summary.results)} result(s)", f"Config: {summary.config_path}"]
     for result in summary.results:
         if result.asset and result.sha256:
             lines.append(f"{result.action}: {result.app_id} -> {result.asset} ({result.sha256})")
+            if result.icon:
+                lines.append(f"  Icon: {result.icon}")
         elif result.asset:
             lines.append(f"{result.action}: {result.asset}")
         else:

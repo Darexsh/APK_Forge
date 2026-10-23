@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from apk_forge.catalog import Catalog, CatalogApp, load_catalog, upsert_catalog_app, write_catalog
@@ -100,6 +100,7 @@ def publish_signed_workspace_outputs(
             mpp=mpp,
             patches_enable=planned.app.patches.enable,
             patches_disable=planned.app.patches.disable,
+            icon=planned.app.icon,
         )
         catalog = upsert_catalog_app(catalog, catalog_app)
         published.append(
@@ -118,6 +119,15 @@ def publish_signed_workspace_outputs(
 
     release_catalog = catalog
     list_config = release_list_config or config
+    config_by_id = {app.id: app for app in list_config.apps}
+    for existing in tuple(release_catalog.apps):
+        managed_app = config_by_id.get(existing.id)
+        if existing.type == "managed" and managed_app is not None and existing.icon != managed_app.icon:
+            release_catalog = upsert_catalog_app(
+                release_catalog,
+                replace(existing, icon=managed_app.icon),
+            )
+    catalog = release_catalog
     release_client.ensure_release(
         ReleaseSpec(
             repository=repository,

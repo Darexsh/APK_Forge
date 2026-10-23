@@ -32,6 +32,13 @@ class SourceApk:
 
 
 @dataclass(frozen=True)
+class IconAsset:
+    release: str
+    asset: str
+    sha256: str
+
+
+@dataclass(frozen=True)
 class OutputConfig:
     release_prefix: str | None = None
     asset_name: str | None = None
@@ -53,6 +60,7 @@ class ManagedApp:
     source_apk: SourceApk
     output: OutputConfig
     patches: PatchSelection = PatchSelection()
+    icon: IconAsset | None = None
 
 
 @dataclass(frozen=True)

@@ -44,6 +44,9 @@
         "sourceApk": {
           "$ref": "#/$defs/sourceApk"
         },
+        "icon": {
+          "$ref": "#/$defs/iconAsset"
+        },
         "output": {
           "$ref": "#/$defs/output"
         },
@@ -132,6 +135,25 @@
           }
         }
       ]
+    },
+    "iconAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release", "asset", "sha256"],
+      "properties": {
+        "release": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      }
     },
     "output": {
       "type": "object",

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from apk_forge.errors import ConfigError
+from apk_forge.models import IconAsset
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class CatalogApp:
     mpp: str | None = None
     patches_enable: tuple[str, ...] = ()
     patches_disable: tuple[str, ...] = ()
+    icon: IconAsset | None = None
 
     def to_json(self) -> dict[str, Any]:
         data = {
@@ -42,6 +44,12 @@ class CatalogApp:
             data["patches"] = {
                 "enable": list(self.patches_enable),
                 "disable": list(self.patches_disable),
+            }
+        if self.icon is not None:
+            data["icon"] = {
+                "release": self.icon.release,
+                "asset": self.icon.asset,
+                "sha256": self.icon.sha256,
             }
         return data
 
@@ -138,6 +146,7 @@ def _parse_catalog_app(index: int, data: Any) -> CatalogApp:
         mpp=_optional_string(data, "mpp", where),
         patches_enable=_parse_patch_selection(data, where, "enable"),
         patches_disable=_parse_patch_selection(data, where, "disable"),
+        icon=_parse_icon_asset(data.get("icon"), where),
     )
 
 
@@ -155,6 +164,22 @@ def _optional_string(data: dict[str, Any], key: str, where: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{where}.{key} must be a non-empty string")
     return value
+
+
+def _parse_icon_asset(data: Any, where: str) -> IconAsset | None:
+    if data is None:
+        return None
+    icon_where = f"{where}.icon"
+    if not isinstance(data, dict):
+        raise ConfigError(f"{icon_where} must be an object")
+    digest = _required_string(data, "sha256", icon_where)
+    if len(digest) != 64 or any(character not in "0123456789abcdefABCDEF" for character in digest):
+        raise ConfigError(f"{icon_where}.sha256 must be a 64-character hex digest")
+    return IconAsset(
+        release=_required_string(data, "release", icon_where),
+        asset=_required_string(data, "asset", icon_where),
+        sha256=digest.lower(),
+    )
 
 
 def _parse_patch_selection(data: dict[str, Any], where: str, key: str) -> tuple[str, ...]:

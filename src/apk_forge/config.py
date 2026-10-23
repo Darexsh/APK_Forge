@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from apk_forge.errors import ConfigError
-from apk_forge.models import AppsConfig, ManagedApp, MppSource, OutputConfig, PatchSelection, SourceApk
+from apk_forge.models import AppsConfig, IconAsset, ManagedApp, MppSource, OutputConfig, PatchSelection, SourceApk
 
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _SHA256_PATTERN = re.compile(r"^[a-fA-F0-9]{64}$")
@@ -112,6 +112,7 @@ def _parse_app(index: int, data: Any, mpp_sources: dict[str, MppSource]) -> Mana
     source_apk = _parse_source_apk(data.get("sourceApk"), where)
     output = _parse_output(data.get("output"), app_id, where)
     patches = _parse_patch_selection(data.get("patches"), where)
+    icon = _parse_icon_asset(data.get("icon"), where)
 
     return ManagedApp(
         id=app_id,
@@ -122,6 +123,23 @@ def _parse_app(index: int, data: Any, mpp_sources: dict[str, MppSource]) -> Mana
         source_apk=source_apk,
         output=output,
         patches=patches,
+        icon=icon,
+    )
+
+
+def _parse_icon_asset(data: Any, parent: str) -> IconAsset | None:
+    if data is None:
+        return None
+    where = f"{parent}.icon"
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be an object")
+    sha256 = _required_string(data, "sha256", where)
+    if not _SHA256_PATTERN.match(sha256):
+        raise ConfigError(f"{where}.sha256 must be a 64-character hex digest")
+    return IconAsset(
+        release=_required_string(data, "release", where),
+        asset=_required_string(data, "asset", where),
+        sha256=sha256.lower(),
     )
 
 

@@ -26,10 +26,17 @@ class ReleaseSpec:
     title: str
     body_template: str
     asset_list: str | None = None
+    asset_extensions: frozenset[str] = frozenset(SOURCE_PACKAGE_EXTENSIONS)
+    empty_asset_message: str = "No source package assets listed yet."
 
 
-def inject_asset_list(template: str, assets: list[dict]) -> str:
-    asset_list = format_asset_list(assets)
+def inject_asset_list(
+    template: str,
+    assets: list[dict],
+    allowed_extensions: set[str] | frozenset[str] = SOURCE_PACKAGE_EXTENSIONS,
+    empty_message: str = "No source package assets listed yet.",
+) -> str:
+    asset_list = format_asset_list(assets, allowed_extensions, empty_message)
     return inject_asset_text(template, asset_list)
 
 
@@ -42,17 +49,21 @@ def inject_asset_text(template: str, asset_list: str) -> str:
     return f"{before}{ASSET_LIST_START}\n{asset_list}\n{ASSET_LIST_END}{after}"
 
 
-def format_asset_list(assets: list[dict]) -> str:
-    apk_assets = sorted(
+def format_asset_list(
+    assets: list[dict],
+    allowed_extensions: set[str] | frozenset[str] = SOURCE_PACKAGE_EXTENSIONS,
+    empty_message: str = "No source package assets listed yet.",
+) -> str:
+    listed_assets = sorted(
         (
             asset for asset in assets
-            if Path(str(asset.get("name", ""))).suffix.lower() in SOURCE_PACKAGE_EXTENSIONS
+            if Path(str(asset.get("name", ""))).suffix.lower() in allowed_extensions
         ),
         key=lambda asset: str(asset.get("name", "")).lower(),
     )
-    if not apk_assets:
-        return "- _No source package assets listed yet._"
-    return "\n".join(f"- `{asset['name']}`" for asset in apk_assets)
+    if not listed_assets:
+        return f"- _{empty_message}_"
+    return "\n".join(f"- `{asset['name']}`" for asset in listed_assets)
 
 
 class GitHubReleaseClient:
@@ -93,7 +104,9 @@ class GitHubReleaseClient:
             "name": spec.title,
             "body": inject_asset_text(
                 spec.body_template,
-                spec.asset_list if spec.asset_list is not None else format_asset_list([]),
+                spec.asset_list
+                if spec.asset_list is not None
+                else format_asset_list([], spec.asset_extensions, spec.empty_asset_message),
             ),
             "draft": False,
             "prerelease": False,
@@ -123,7 +136,13 @@ class GitHubReleaseClient:
     def update_release_metadata(self, spec: ReleaseSpec, release: dict) -> dict:
         wanted_body = inject_asset_text(
             spec.body_template,
-            spec.asset_list if spec.asset_list is not None else format_asset_list(release.get("assets", [])),
+            spec.asset_list
+            if spec.asset_list is not None
+            else format_asset_list(
+                release.get("assets", []),
+                spec.asset_extensions,
+                spec.empty_asset_message,
+            ),
         )
         if (release.get("name") or "") == spec.title and (release.get("body") or "") == wanted_body:
             return release
