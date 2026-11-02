@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from apk_forge.errors import ForgeError
 from apk_forge.github_release import GitHubReleaseClient, ReleaseSpec, github_asset_name
+from apk_forge.releases import source_version_code, source_version_name
 from apk_forge.source_apk import sha256_file
-from apk_forge.source_icon import IMAGE_SUFFIXES, extract_source_icon
+from apk_forge.source_icon import IMAGE_SUFFIXES, extract_source_icon, read_apk_metadata
 
 DEFAULT_ARCHIVE_RELEASE_TAG = "archive-apks"
 DEFAULT_ARCHIVE_RELEASE_TITLE = "Archive APKs"
@@ -158,6 +160,25 @@ def _publish_one_archive(
     icon_release_spec: ReleaseSpec,
 ) -> ArchivePublishResult:
     apk = _resolve_archive_apk(vault_root, archive_id, apk_path)
+    archive_entry = _get_archive_entry(vault_root / "archive.json", archive_id)
+    try:
+        package_name, version_code, version_name = read_apk_metadata(apk)
+    except RuntimeError as exc:
+        if archive_entry is not None and all(
+            key in archive_entry for key in ("packageName", "versionCode", "versionName")
+        ):
+            raise ArchivePublishError(str(exc)) from exc
+        package_name = str((archive_entry or {}).get("packageName", ""))
+        version_name = source_version_name(apk)
+        if version_name == "unknown":
+            version_name = str((archive_entry or {}).get("versionName", "unknown"))
+        version_code = source_version_code(apk, version_name)
+    apk_digest = sha256_file(apk)
+    previous_asset = archive_entry.get("asset") if archive_entry is not None else None
+    apk_unchanged = archive_entry is not None and (
+        archive_entry.get("asset") == github_asset_name(apk.name)
+        and archive_entry.get("sha256") == apk_digest
+    )
     icon_path = extract_source_icon(
         apk,
         archive_id,
@@ -170,13 +191,6 @@ def _publish_one_archive(
         icon_path.name if icon_path is not None else None,
         icon_digest,
     )
-    if icon_path is not None and icon_digest is not None:
-        _update_archive_icon(
-            vault_root / "archive.json",
-            archive_id,
-            icon_path.name,
-            icon_digest,
-        )
     remote_has_asset = False
     remote_has_icon = False
 
@@ -186,7 +200,7 @@ def _publish_one_archive(
             release_spec.repository,
             release_spec.tag,
         )
-        if force or not remote_has_asset:
+        if force or not remote_has_asset or not apk_unchanged:
             release_client.publish_asset(
                 release_spec,
                 apk,
@@ -200,14 +214,32 @@ def _publish_one_archive(
             )
             if force or not icon_unchanged or not remote_has_icon:
                 release_client.publish_asset(icon_release_spec, icon_path, ICON_EXTENSIONS)
+        if (
+            isinstance(previous_asset, str)
+            and previous_asset != remote_asset_name
+        ):
+            release_client.remove_asset_by_name(release_spec, previous_asset)
+
+    _update_archive_entry(
+        vault_root / "archive.json",
+        archive_id,
+        asset=github_asset_name(apk.name),
+        package_name=package_name,
+        version_code=version_code,
+        version_name=version_name,
+        digest=apk_digest,
+        icon=icon_path.name if icon_path is not None else None,
+        icon_digest=icon_digest,
+        release_tag=release_spec.tag,
+    )
 
     if skip_upload:
         action = "configured"
-    elif remote_has_asset and not force and (
+    elif remote_has_asset and apk_unchanged and not force and (
         icon_path is None or (icon_unchanged and remote_has_icon)
     ):
         action = "unchanged"
-    elif remote_has_asset:
+    elif remote_has_asset or previous_asset:
         action = "updated"
     else:
         action = "uploaded"
@@ -267,7 +299,9 @@ def _archive_icon_matches(path: Path, archive_id: str, asset: str | None, digest
     )
 
 
-def _update_archive_icon(path: Path, archive_id: str, asset: str, digest: str) -> None:
+def _get_archive_entry(path: Path, archive_id: str) -> dict | None:
+    if not path.is_file():
+        return None
     catalog = _load_archive_json(path)
     entries = [
         app for app in catalog["apps"]
@@ -277,7 +311,49 @@ def _update_archive_icon(path: Path, archive_id: str, asset: str, digest: str) -
         raise ArchivePublishError(
             f"Expected one archive.json entry for {archive_id!r}; found {len(entries)}"
         )
-    entries[0]["icon"] = {"release": ICON_RELEASE_TAG, "asset": asset, "sha256": digest}
+    return entries[0] if entries else None
+
+
+def _update_archive_entry(
+    path: Path,
+    archive_id: str,
+    *,
+    asset: str,
+    package_name: str,
+    version_code: int,
+    version_name: str,
+    digest: str,
+    icon: str | None,
+    icon_digest: str | None,
+    release_tag: str,
+) -> None:
+    if not path.is_file():
+        return
+    catalog = _load_archive_json(path)
+    entries = [
+        app for app in catalog["apps"]
+        if isinstance(app, dict) and app.get("id") == archive_id
+    ]
+    if len(entries) != 1:
+        raise ArchivePublishError(
+            f"Expected one archive.json entry for {archive_id!r}; found {len(entries)}"
+        )
+    entry = entries[0]
+    previous_catalog = json.dumps(catalog, sort_keys=True, ensure_ascii=False)
+    entry.update({
+        "asset": asset,
+        "packageName": package_name,
+        "release": release_tag,
+        "sha256": digest,
+        "versionCode": version_code,
+        "versionName": version_name,
+        "type": "archive",
+    })
+    if icon is not None and icon_digest is not None:
+        entry["icon"] = {"release": ICON_RELEASE_TAG, "asset": icon, "sha256": icon_digest}
+    if json.dumps(catalog, sort_keys=True, ensure_ascii=False) == previous_catalog:
+        return
+    catalog["generatedAt"] = datetime.now(timezone.utc).isoformat()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 

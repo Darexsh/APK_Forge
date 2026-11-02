@@ -40,6 +40,26 @@ def extract_source_icon(source_package: Path, app_id: str, output_dir: Path) -> 
     return None
 
 
+def read_apk_metadata(apk_path: Path) -> tuple[str, int, str]:
+    """Read the package name, version code, and version name from an APK."""
+    aapt = _find_aapt()
+    if aapt is None:
+        raise RuntimeError("aapt not found; install Android build-tools to read APK metadata")
+    badging = _run_aapt(aapt, "dump", "badging", str(apk_path))
+    match = re.search(
+        r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']*)'",
+        badging or "",
+        re.MULTILINE,
+    )
+    if match is None:
+        raise RuntimeError(f"Could not read package/version metadata from APK: {apk_path}")
+    try:
+        version_code = int(match.group(2))
+    except ValueError as exc:
+        raise RuntimeError(f"APK has an invalid versionCode: {match.group(2)!r}") from exc
+    return match.group(1), version_code, match.group(3)
+
+
 def _find_sidecar_icon(package: zipfile.ZipFile) -> str | None:
     candidates = [
         name for name in package.namelist()
