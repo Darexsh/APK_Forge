@@ -200,7 +200,9 @@ def _publish_one_archive(
             release_spec.repository,
             release_spec.tag,
         )
-        if force or not remote_has_asset or not apk_unchanged:
+        if force or not remote_has_asset or (
+            archive_entry is not None and not apk_unchanged
+        ):
             release_client.publish_asset(
                 release_spec,
                 apk,
@@ -235,7 +237,7 @@ def _publish_one_archive(
 
     if skip_upload:
         action = "configured"
-    elif remote_has_asset and apk_unchanged and not force and (
+    elif remote_has_asset and (archive_entry is None or apk_unchanged) and not force and (
         icon_path is None or (icon_unchanged and remote_has_icon)
     ):
         action = "unchanged"
