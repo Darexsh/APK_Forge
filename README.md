@@ -324,11 +324,22 @@ PYTHONPATH=src python -m unittest discover -s tests
 
 * * *
 
-## 📜 License
+📜 License
+----------
 
-APK Forge is licensed under the **GNU General Public License v3.0**.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 
-See [LICENSE](LICENSE) for the full license text.
+This license applies to the updater application code in this repository. Upstream patch and app projects remain under their own licenses and notice terms.
+
+**Copyright (c) 2026 Darexsh by Daniel Sichler**
+
+You are free to use, study, modify, and redistribute this software under the terms of GPL-3.0.
+
+Please include the following notice when redistributing this project:
+
+> **Developer:** Darexsh by Daniel Sichler. Licensed under GNU GPL v3.0. See `LICENSE` for details.
+
+The full license is available in the [LICENSE](LICENSE) file.
 
 * * *
 
@@ -346,3 +357,4 @@ APK Forge is the automation layer only. This public repository does not provide 
 * * *
 
 <div align="center"><sub>Created with ❤️ by Daniel Sichler</sub></div>
+
