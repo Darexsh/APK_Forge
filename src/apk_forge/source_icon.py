@@ -284,7 +284,15 @@ def _render_vector_icon(aapt: str, apk_path: Path, xml_member: str, app_id: str,
                 if converter is None:
                     return None
                 command = [converter, "-", str(output_path)] if Path(converter).name == "magick" else [converter, "svg:-", str(output_path)]
-                result = subprocess.run(command, input=svg, text=True, capture_output=True, check=False)
+                result = subprocess.run(
+                    command,
+                    input=svg,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    capture_output=True,
+                    check=False,
+                )
                 if result.returncode != 0 or not output_path.is_file():
                     return None
         from PIL import Image
