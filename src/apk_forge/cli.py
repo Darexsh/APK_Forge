@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from apk_forge.app_removal import apply_app_removal, format_app_removal_plan, format_apply_result, plan_app_removal
 from apk_forge.archive_publish import format_archive_publish_summary, publish_archive_apks
 from apk_forge.catalog import Catalog, load_catalog, write_catalog
 from apk_forge.config import load_apps_config
@@ -54,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             return _source(args)
         if args.command == "archive":
             return _archive(args)
+        if args.command == "app":
+            return _app(args)
         if args.command == "publish":
             return _publish(args)
         if args.command == "sync":
@@ -215,6 +218,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     archive_publish.add_argument("--skip-upload", action="store_true")
     archive_publish.add_argument("--force", action="store_true", help="upload even when asset already exists")
+
+    app = subparsers.add_parser("app", help="manage configured managed apps")
+    app_subparsers = app.add_subparsers(dest="app_command", required=True)
+    app_remove = app_subparsers.add_parser(
+        "remove",
+        help="remove a managed app from config/catalog and its release assets",
+    )
+    app_remove.add_argument("--app-id", required=True)
+    app_remove.add_argument("--config", required=True, type=Path)
+    app_remove.add_argument("--catalog", required=True, type=Path)
+    app_remove.add_argument("--vault-root", required=True, type=Path)
+    app_remove.add_argument("--repo", required=True)
+    app_remove.add_argument("--github-token")
+    app_remove.add_argument(
+        "--apply",
+        action="store_true",
+        help="apply the removal; without this flag, only preview the changes",
+    )
 
     publish = subparsers.add_parser("publish", help="publish signed workspace APKs")
     publish.add_argument("--config", required=True, type=Path)
@@ -562,6 +583,33 @@ def _archive(args: argparse.Namespace) -> int:
             force=args.force,
         )
         print(format_archive_publish_summary(result))
+        return 0
+
+    return 2
+
+
+def _app(args: argparse.Namespace) -> int:
+    if args.app_command == "remove":
+        token = _github_token(args)
+        client = GitHubReleaseClient(token or "")
+        plan = plan_app_removal(
+            app_id=args.app_id,
+            config_path=args.config,
+            catalog_path=args.catalog,
+            vault_root=args.vault_root,
+            repository=args.repo,
+            client=client,
+        )
+        if not args.apply:
+            print(format_app_removal_plan(plan))
+            return 0
+        apply_app_removal(
+            plan,
+            repository=args.repo,
+            vault_root=args.vault_root,
+            client=client,
+        )
+        print(format_apply_result(plan))
         return 0
 
     return 2

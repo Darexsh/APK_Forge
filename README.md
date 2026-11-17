@@ -218,6 +218,37 @@ python -m apk_forge sync \
   --body-template /path/to/vault/docs/patched-apks-release.md
 ```
 
+### Remove a managed app
+
+Preview a full managed-app removal first:
+
+```powershell
+python -m apk_forge app remove `
+  --app-id example-app `
+  --config "..\private-vault\apps.json" `
+  --catalog "..\private-vault\catalog.json" `
+  --vault-root "..\private-vault" `
+  --repo "owner/private-vault"
+```
+
+The preview lists the config and catalog entries and source, patched, and
+unreferenced icon release assets that would be removed. Local source files are
+kept. Add `--apply` to perform the removal:
+
+```powershell
+python -m apk_forge app remove `
+  --app-id example-app `
+  --config "..\private-vault\apps.json" `
+  --catalog "..\private-vault\catalog.json" `
+  --vault-root "..\private-vault" `
+  --repo "owner/private-vault" `
+  --apply
+```
+
+After applying, commit and push the updated Vault files so downstream catalog
+consumers receive the change. This command removes managed apps; archive entries
+in `archive.json` are managed separately.
+
 * * *
 
 ## 🧩 Patch Selection
